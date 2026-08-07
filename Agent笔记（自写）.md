@@ -6950,6 +6950,604 @@ def find_max(a: int, b: int) -> int | None:
         return None
     return a if a > b else b
 ```
+# 模块化
+
+## 包、模块、成员关系
+
+![relation.excalidraw](https://resource.duyiedu.com/yuanjin/202605251100825.svg)
+
+## 定义模块（导出）
+
+创建一个 `.py` 文件，就是在**定义**一个模块。文件顶层的所有定义（变量、函数、类）就是这个模块**导出**的内容：
+
+```python
+# my_math.py —— 这就是一个模块，文件名叫 my_math.py，模块名就是 my_math
+
+pi: float = 3.14159  # 导出变量
+
+
+def add(a: int, b: int) -> int:  # 导出函数
+    return a + b
+
+
+class Calculator:  # 导出类
+    def multiply(self, a: int, b: int) -> int:
+        return a * b
+```
+
+**要点：**
+- 文件名即模块名（去掉 `.py`）
+- 文件顶层的**变量、函数、类**都是模块的导出成员
+- 在函数/类**内部**定义的内容不是导出成员（外部无法访问）
+
+### 私有成员约定
+
+Python 没有真正的私有机制，但用**下划线开头**表示"内部实现，外部不应直接使用"：
+
+```python
+# my_math.py
+
+PI: float = 3.14159  # 公开
+
+
+def add(a: int, b: int) -> int:  # 公开
+    return a + b
+
+
+def _internal_helper(a: int) -> int:  # "私有"——约定外部不应使用
+    return a * 2
+```
+
+`from module import *` 时，下划线开头的成员**不会**被导入。
+
+### 使用 `__all__` 控制导出清单
+
+`__all__` 明确指定哪些成员是公开 API：
+
+```python
+# my_math.py
+
+__all__: list[str] = ["PI", "add"]  # 只导出 PI 和 add
+
+
+PI: float = 3.14159
+E: float = 2.71828  # 没有在 __all__ 中，from import * 不会导入
+
+
+def add(a: int, b: int) -> int:
+    return a + b
+
+
+def subtract(a: int, b: int) -> int:  # 不在 __all__ 中
+    return a - b
+```
+
+**`__all__` 的作用：**
+1. 控制 `from my_math import *` 导入哪些成员
+2. **作为模块的"文档"，告诉使用者哪些是稳定 API**
+3. 和一些其他工具配合
+
+### 模块的 `__name__` 与直接运行
+
+每个模块都有一个内置属性 `__name__`：
+- 直接运行时：`__name__ == "__main__"`
+- 被导入时：`__name__ == 模块名`
+
+利用这个特性，可以在模块中写测试代码，只有直接运行时才执行：
+
+```python
+# my_math.py
+
+__all__: list[str] = ["PI", "add"]
+
+
+PI: float = 3.14159
+
+
+def add(a: int, b: int) -> int:
+    return a + b
+
+
+# 以下代码只有在 python my_math.py 直接运行时才执行
+# 作为模块被导入时不会执行
+if __name__ == "__main__":
+    print(add(3, 5))  # 8
+    print(add(-1, 1))  # 0
+```
+
+---
+
+## 导入模块
+
+Python在**运行时**动态导入
+
+### import 语句
+
+```python
+import my_math  # 导入整个模块
+
+print(my_math.PI)  # 通过模块名访问
+print(my_math.add(3, 5))
+
+from my_math import PI, add  # 只导入需要的成员
+
+print(PI)
+print(add(3, 5))
+
+from my_math import *  # 导入 __all__ 中列出的成员（谨慎使用）
+
+print(PI)
+print(add(3, 5))
+# subtract 不在 __all__ 中，不会导入
+
+import my_math as mm  # 模块别名
+from my_math import add as my_add  # 成员别名
+
+print(mm.PI)
+print(my_add(3, 5))
+```
+
+### 模块的动态导入
+
+```python
+import importlib
+
+# 模块名来自变量
+module_name = "math"
+math = importlib.import_module(module_name)
+print(math.sqrt(16))  # 4.0
+
+# 来自用户输入
+user_input = "json"
+module = importlib.import_module(user_input)
+data = module.dumps({"key": "value"})
+
+# 动态导入子模块
+submodule = importlib.import_module("os.path")
+print(submodule.join("a", "b"))  # a/b
+```
 
 
 
+### 模块的执行与缓存
+
+模块在**首次导入**时**执行一次**，后续导入使用缓存，不会重复执行：
+
+```python
+import my_math  # 第一次导入：执行 my_math.py
+import my_math  # 第二次导入：使用缓存，不执行
+import my_math  # 第三次导入：使用缓存，不执行
+```
+
+缓存存储在 `sys.modules` 中：
+
+```python
+import sys
+
+# 查看已加载的所有模块
+print("math" in sys.modules)  # True（因为 math 已被导入）
+print(my_math in sys.modules.values())  # True
+```
+
+---
+
+## 包（Package）
+
+只要一个目录中包含`__init__.py`模块，Python就会将该目录其视为一个包
+
+### `__init__.py` 的作用
+
+`__init__.py` 是包的初始化文件，它在第一次导入该包的时候会自动运行，你可以：
+1. **组织导出接口** —— 在包级别暴露子模块的成员
+2. **包级别的初始化** —— 连接数据库、加载配置等
+
+```python
+# utils/__init__.py
+
+__all__: list[str] = ["add", "subtract", "to_upper", "reverse"]
+
+from .math_ops import add, subtract
+from .string_ops import to_upper, reverse
+```
+
+---
+
+## 相对导入
+
+包内部的模块可以通过相对导入引用兄弟模块：
+
+```
+project/
+├── main.py
+└── utils/
+    ├── __init__.py
+    ├── math_ops.py
+    └── string_ops.py
+```
+
+```python
+# utils/string_ops.py
+from .math_ops import add  # . 表示当前包（utils）
+
+
+def add_and_reverse(a: int, b: int) -> str:
+    result: int = add(a, b)
+    return reverse(str(result))
+```
+
+相对导入符号：
+- `.`  —— 当前包
+- `..` —— 父包
+- `...` —— 祖父包
+
+**限制：** 相对导入**不能**用于直接运行的模块，只用于包内模块被导入时。
+
+---
+
+## 搜索路径
+
+`import` 语句按以下顺序搜索模块：
+
+1. 内置模块，如：`sys`
+   ```python
+   import sys
+   
+   print(sys.builtin_module_names) # 查看所有内置模块
+   ```
+2. `sys.path`
+
+   1. 当前脚本所在目录
+   2. `PYTHONPATH` 环境变量中的路径
+   3. Python 内置模块
+   4. 第三方包（`site-packages`）
+
+
+```python
+import sys
+
+# 查看模块搜索路径
+for path in sys.path:
+    print(path)
+```
+
+---
+
+## 循环导入问题
+
+```python
+# a.py
+from b import bar
+
+def foo() -> str:
+    return bar()
+
+# b.py —— 此时 a.py 还没执行完，foo 还不存在
+from a import foo  # ImportError
+
+def bar() -> str:
+    return "bar"
+```
+
+**解决方案：**
+1. 将公共代码抽到第三个模块
+2. 延迟导入（在函数内部导入）
+
+---
+
+## 作业（已完成）
+
+### 复述
+
+使用费曼学习法，复述：
+
+1. 包、模块、成员关系
+2. `__all__`的作用
+3. `__init__.py`的作用
+4. python对模块或包的搜索是怎样的
+
+### 学习`__slots__`
+
+查询`python`中`__slots__`的作用
+**总结：**
+**1.限制类的实例去动态属性添加**
+```python
+class Person:
+    __slots__ = ['name', 'age']  # 只允许 name 和 age
+    
+    def __init__(self, name, age):
+        self.name = name
+        self.age = age
+
+p = Person("Alice", 25)
+p.city = "NYC"  # ❌ AttributeError: 'Person' object has no attribute 'city'
+```
+**2.节省内存**
+普通实例使用 __dict__ 字典存储属性，字典本身占用较大内存（哈希表）
+__slots__ 使用固定大小的数组存储属性引用，内存占用显著减少
+**3.提升访问速度**
+由于不需要通过字典查找（没有__dict__属性了），__slots__ 的属性访问速度略快（约 10-15%）
+**4.继承行为**
+子类的__slot__会与父类的__slot__做合并
+子类没有定义__slot__,父类有__slot__，则子类还是没有__slot__属性，可以动态添加
+```python
+class Parent:
+    __slots__ = ['x']
+
+class Child(Parent):
+    __slots__ = ['y']  # 子类的 slots 会与父类合并
+    
+c = Child()
+c.x = 1  # ✅ 允许
+c.y = 2  # ✅ 允许
+c.z = 3  # ❌ 不允许
+```
+# 标准库
+
+官方手册：
+
+- 按功能：https://docs.python.org/zh-cn/3.14/library/index.html
+- 按名称：https://docs.python.org/zh-cn/3/py-modindex.html
+
+包含：
+
+- 内置API
+- 内置模块
+- 标准库
+
+## 作业（使用AI，已看懂）
+
+### 作业一：树形目录展示
+
+编写一个函数 `show_tree(dir_path: str, show_hidden: bool = False)`，接收两个参数：
+
+- `dir_path`：目录路径，可以是绝对路径或相对路径（相对当前工作目录 CWD）
+- `show_hidden`：布尔类型，表示是否显示隐藏文件/目录
+
+  隐藏判断简单处理：文件或目录只要以`.`开头，则视为隐藏文件或目录，否则的话视为可视。
+
+函数的功能是用树形递归的方式展示指定目录下的所有内容。效果类似于 Linux 的 `tree` 命令。
+
+输出格式参考如下：
+```
+.
+├── file1.txt
+├── dir1
+│   ├── file2.txt
+│   └── file3.txt
+└── file4.txt
+```
+
+### 作业二：Markdown 文件合并
+
+编写一个函数 `merge_markdown(files: list[str], output: str) -> None`，接收两个参数：
+
+- `files`：Markdown 文件路径列表
+- `output`：合并后保存的目标文件路径
+
+函数的作用是将多个 Markdown 文件合并为一个文件保存到目标路径。合并规则如下：
+
+1. 最终合并结果的一级标题固定为 `# 合并结果`
+2. 所有原始 Markdown 文件的标题需要降级：
+   - 一级标题 `#` → 二级标题 `##`
+   - 二级标题 `##` → 三级标题 `###`
+   - 以此类推
+   - 六级标题 `######` → 正文，用 **加粗** 表示
+3. 非标题内容（正文、列表、代码块等）保持不变
+
+# 第三方库
+
+Python 拥有庞大的第三方库生态，可以通过包管理工具 `pip` 来安装、升级、卸载和管理依赖。
+
+## pip 概述
+
+`pip` 是 Python 的官方包管理器，从 Python 3.4 开始自带。它从 **PyPI（Python Package Index）** 下载包，默认源为 `https://pypi.org`。
+
+```bash
+# 查看 pip 版本
+pip --version
+
+# 查看帮助
+pip help
+```
+
+> 如果你同时安装了 Python 2 和 Python 3，可能需要用 `pip3` 代替 `pip`。或者使用 `python -m pip` 确保调用的是当前 Python 对应的 pip。
+
+## 国内镜像源
+
+由于网络原因，国内访问 PyPI 可能很慢，可以使用国内镜像：
+
+```bash
+# 临时使用阿里云镜像
+pip install 包名 -i https://mirrors.aliyun.com/pypi/simple/
+
+# 临时使用清华大学镜像
+pip install 包名 -i https://pypi.tuna.tsinghua.edu.cn/simple/
+```
+
+配置默认镜像源（全局生效）：
+
+```bash
+pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
+```
+
+常用国内镜像源：
+
+| 镜像源       | URL                                                  |
+| ------------ | ---------------------------------------------------- |
+| 阿里云       | https://mirrors.aliyun.com/pypi/simple/              |
+| 清华大学     | https://pypi.tuna.tsinghua.edu.cn/simple/            |
+| 中国科技大学 | https://pypi.mirrors.ustc.edu.cn/simple/             |
+| 华为云       | https://repo.huaweicloud.com/repository/pypi/simple/ |
+
+## 安装第三方库
+**注意**：
+1.官方包管理器的安装：第三方库的安装位置与python版本绑定。安装的位置在site-packages（'C:\\Users\\xiaolei520\\.pyenv\\pyenv-win\\versions\\3.9.13\\lib\\site-packages'）
+**带来的问题**：不同项目之间，可能使用相同的py版本，但是使用不同版本的第三方库，这样pip安装就有问题
+**解决方案**：
+1.使用虚拟环境（参考下面章节）
+2.
+### 基础安装
+
+```bash
+# 安装最新版本
+pip install 包名
+
+# 实际例子
+pip install requests
+pip install flask
+```
+
+### 指定版本
+
+```bash
+# 安装指定版本
+pip install requests==2.31.0
+
+# 安装高于某个版本
+pip install "requests¡2.20"
+
+# 安装某个范围内的版本
+pip install "requests>=2.20,<3.0"
+```
+
+| 符号 | 作用             |
+| ---- | ---------------- |
+| `==` | 固定版本         |
+| `>=` | 最低版本限制     |
+| `>`  | 严格高于         |
+| `<=` | 最高版本限制     |
+| `<`  | 严格低于         |
+| `~=` | 同系列小版本更新 |
+| `,`  | 组合多条件       |
+| `!=` | 排除指定版本     |
+| `*`  | 通配补丁版本     |
+
+### 一次安装多个
+
+```bash
+pip install requests flask django
+```
+
+## 升级第三方库
+
+```bash
+# 升级到最新版本
+pip install --upgrade 包名
+# 或简写
+pip install -U 包名
+
+# 升级 pip 自身
+pip install --upgrade pip
+```
+
+## 卸载第三方库
+
+```bash
+# 卸载包及其依赖
+pip uninstall 包名
+
+# 卸载多个
+pip uninstall requests flask
+
+# 注意：卸载操作会询问确认，加 -y 跳过确认
+pip uninstall -y 包名
+```
+
+## 查看与管理包
+
+```bash
+# 列出所有已安装的包
+pip list
+
+# 查看过时的包（可升级的）
+pip list --outdated
+
+# 查看特定包的详细信息
+pip show 包名
+
+# 示例输出
+pip show requests
+# Name: requests
+# Version: 2.31.0
+# Summary: Python HTTP for Humans.
+# Requires: certifi, charset-normalizer, idna, urllib3
+# Required-by:  （哪些包依赖它）
+```
+
+## 依赖管理
+
+### requirements.txt
+
+在项目中使用 `requirements.txt` 记录所有依赖：
+
+```bash
+# 生成当前环境的依赖列表
+pip freeze > requirements.txt
+```
+
+`requirements.txt` 文件内容示例：
+
+```
+requests==2.31.0
+flask==3.0.0
+numpy>=1.24.0
+```
+
+从 `requirements.txt` 安装依赖：
+
+```bash
+pip install -r requirements.txt
+```
+
+## 虚拟环境
+
+不同项目可能需要不同版本的依赖，使用虚拟环境可以隔离依赖：
+
+```bash
+# 创建虚拟环境（Python 3.3+）
+python -m venv .venv (-m表示使用模块，venv是py的内置模块，可以想模块查找顺序)
+
+# 激活虚拟环境
+# macOS / Linux
+source .venv/bin/activate
+
+# Windows
+.venv\Scripts\activate
+
+# 激活后，pip 安装的包只在该环境中生效
+pip install requests
+
+# 退出虚拟环境
+deactivate
+```
+
+### 使用 venv 管理项目依赖
+
+```bash
+# 1. 创建并激活虚拟环境
+python -m venv .venv
+source .venv/bin/activate
+
+# 2. 安装项目依赖
+pip install -r requirements.txt
+
+# 3. 开发完成后冻结依赖
+pip freeze > requirements.txt
+
+# 4. 退出虚拟环境
+deactivate
+```
+
+> 小知识：
+>
+> 1. `-m`表示python会按照模块的查找顺序查找模块运行
+> 2. `venv`的前身是一个第三方库`virtualenv`，从Python 3.3开始，官方将 `venv` 作为其功能的“精简版”集成到了标准库中，这样我们就不需要额外安装，开箱即用了。
+
+## 作业（使用AI，已看懂）
+
+实现一个命令行工具，实现和AI的聊天
+
+
+
+
+   
