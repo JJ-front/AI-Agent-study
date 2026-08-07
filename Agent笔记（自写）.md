@@ -283,7 +283,7 @@ code runner 配置
 | -------------- | ------------ | ---------------- | ------------------------- |
 | 数字类型           | ==int==      | 1, 2, -3, 0      | 支持无限大小                    |
 | 数字类型           | ==float==    | 1.5, -0.3, 2e10  | 64位双精度                    |
-| 数字类型           | complex      | 1+2j, 3-4j       | j表示$\sqrt{-1}$            |
+| 数字类型           | ==complex==      | 1+2j, 3-4j       | j表示$\sqrt{-1}$            |
 | 数字类型<br />布尔类型 | ==bool==     | True, False      | True是1的别名<br />False是0的别名 |
 | 字符串            | ==str==      | "hello", 'world' |                           |
 | 空值             | ==NoneType== | None             |                           |
@@ -2148,7 +2148,4808 @@ print(merge_dicts(d1))
 # {'a': 1, 'b': [1, 2]}
 
 print(merge_dicts())
+```
 
+# Python作用域
+
+作用域（Scope）决定了程序中变量和名字的**可见范围**。理解作用域能帮助你预测代码的执行结果，避免变量名冲突。
+
+---
+
+## LEGB 规则
+
+Python 查找变量时遵循 **LEGB** 规则，按以下优先级顺序搜索：
+
+| 优先级 | 层级 | 说明 |
+|--------|------|------|
+| 1 | **L**ocal | 函数内部（局部作用域） |
+| 2 | **E**nclosing | 嵌套函数的外层函数（闭包） |
+| 3 | **G**lobal | 模块级别（全局作用域） |
+| 4 | **B**uilt-in | Python 内置（如 `len`、`print`） |
+
+```python
+x = "global"          # G：全局作用域
+
+def outer():
+    x = "enclosing"   # E：外层函数作用域
+    
+    def inner():
+        x = "local"   # L：局部作用域
+        print(x)      # 按 L → E → G → B 查找
+    
+    inner()
+
+outer()  # local
+```
+
+---
+
+## 局部作用域（Local）
+
+函数内部定义的变量，只在函数内部可见：
+
+```python
+def demo():
+    local_var = 100   # 局部变量
+    print(local_var)
+
+demo()        # 100
+# print(local_var)  # NameError！函数外部访问不到
+```
+
+**函数参数也是局部变量：**
+
+```python
+def greet(name):      # name 是局部变量
+    message = f"Hello, {name}"  # message 也是局部变量
+    print(message)
+
+greet("Alice")
+# print(name)     # NameError！
+```
+
+---
+
+## 全局作用域（Global）
+
+模块级别（文件最外层）定义的变量：
+
+```python
+count = 0             # 全局变量
+
+def increment():
+    print(count)      # 读取全局变量，OK
+
+increment()  # 0
+```
+
+### 在函数内修改全局变量
+
+直接赋值会创建局部变量，而非修改全局变量：
+
+```python
+count = 0
+
+def wrong_increment():
+    count += 1        # UnboundLocalError！
+
+# wrong_increment()
+```
+
+使用 `global` 关键字声明：
+
+```python
+count = 0
+
+def increment():
+    global count      # 声明使用全局变量
+    count += 1
+    print(count)
+
+increment()  # 1
+increment()  # 2
+print(count) # 2
+```
+
+---
+
+## 闭包作用域（Enclosing）
+
+嵌套函数中，内层函数可以访问外层函数的变量：
+
+```python
+def outer():
+    x = "outer"       # 外层函数的局部变量
+    
+    def inner():
+        print(x)      # 访问外层变量
+    
+    inner()
+
+outer()  # outer
+```
+
+### 修改外层变量
+
+内层函数不能直接修改外层变量：
+
+```python
+def counter():
+    count = 0
+    
+    def increment():
+        count += 1    # UnboundLocalError！
+    
+    increment()
+
+# counter()
+```
+
+使用 `nonlocal` 关键字：
+
+```python
+def make_counter():
+    count = 0
+    
+    def increment():
+        nonlocal count   # 声明使用外层变量
+        count += 1
+        return count
+    
+    return increment
+
+counter = make_counter()
+print(counter())  # 1
+print(counter())  # 2
+print(counter())  # 3
+```
+
+**`nonlocal` vs `global`：**
+
+| 关键字 | 作用 |
+|--------|------|
+| `global` | 声明变量来自**全局**作用域 |
+| `nonlocal` | 声明变量来自**外层函数**作用域 |
+
+---
+
+## 常见错误
+
+### 错误 1：在函数内同时读写全局变量
+
+```python
+x = 10
+
+def demo():
+    print(x)      # 先读
+    x = 20        # 再写 → 编译期就判定 x 是局部变量！
+
+# demo()  # UnboundLocalError
+```
+
+**原因：** Python 在编译函数时就确定了变量作用域，一旦函数内有赋值语句，该变量就被视为局部变量。
+
+**修正：**
+
+```python
+x = 10
+
+def demo():
+    global x
+    print(x)
+    x = 20
+
+demo()  # 10
+print(x)  # 20
+```
+
+### 错误 2：默认参数的陷阱
+
+```python
+def add_item(item, items=[]):
+    items.append(item)
+    return items
+
+print(add_item(1))  # [1]
+print(add_item(2))  # [1, 2] —— 意外！列表被共享了
+```
+
+默认参数在函数定义时求值，只创建一次。
+
+**修正：**
+
+```python
+def add_item(item, items=None):
+    if items is None:
+        items = []
+    items.append(item)
+    return items
+```
+
+---
+
+## 作用域速查
+
+```python
+# 1. 简单函数
+name = "global"
+
+def func():
+    name = "local"    # 局部变量，不影响全局
+    print(name)       # local
+
+func()
+print(name)           # global
+
+# 2. 嵌套函数
+
+def outer():
+    name = "outer"
+    
+    def inner():
+        name = "inner"   # 自己的局部变量
+        print(name)      # inner
+    
+    inner()
+    print(name)          # outer
+
+outer()
+
+# 3. 使用 nonlocal
+def outer():
+    name = "outer"
+    
+    def inner():
+        nonlocal name
+        name = "modified"  # 修改外层变量
+    
+    inner()
+    print(name)            # modified
+
+outer()
+```
+
+---
+
+## 作业(已完成)
+
+### 作业一：作用域判断
+
+阅读以下代码，预测每行 `print` 的输出结果，并在注释中写出你的答案。
+
+```python
+x = 1
+
+def func_a():
+    x = 2
+    
+    def func_b():
+        print(x)      # ?
+    
+    func_b()
+    print(x)          # ?
+
+func_a()
+print(x)              # ?
+```
+
+### 作业二：global 与 nonlocal
+
+阅读以下代码，预测输出结果：
+
+```python
+count = 0
+
+def outer():
+    count = 10
+    
+    def inner():
+        global count
+        count += 1
+        print(count)  # ?
+    
+    inner()
+    print(count)      # ?
+
+outer()
+print(count)          # ?
+```
+
+### 作业三：修复代码
+
+以下代码用于统计函数调用次数，先读取全局计数器打印日志，再递增计数。但实际运行会报错，请修改使其正确运行：
+
+```python
+call_count = 0
+
+def process_data(data):
+  	result = sum(data)
+    # 处理完成后递增计数器
+    call_count += 1 
+    return result
+
+print(process_data([1, 2, 3]))
+print(process_data([4, 5, 6]))
+print(f"总共调用了 {call_count} 次")
+```
+
+### 作业四：闭包计数器
+
+实现一个函数 `make_multiplier(n)`，返回一个函数。返回的函数接收一个参数 `x`，返回 `n * x`。
+
+要求使用闭包实现，不要使用 `global`。
+
+```python
+triple = make_multiplier(3)
+print(triple(5))   # 15
+print(triple(10))  # 30
+
+double = make_multiplier(2)
+print(double(7))   # 14
+```
+
+### 作业五：综合练习
+
+实现一个函数 `create_account(initial_balance)`，返回两个函数：
+- `deposit(amount)`: 存款，返回新余额
+- `withdraw(amount)`: 取款，余额不足返回 `"余额不足"`，否则返回新余额
+
+要求使用闭包保存余额状态，不要暴露余额变量。
+
+```python
+deposit, withdraw = create_account(100)
+print(deposit(50))    # 150
+print(withdraw(30))   # 120
+print(withdraw(200))  # 余额不足
+```
+# Lambda表达式
+
+Lambda表达式用于创建**匿名函数**——即没有名称的临时函数。当你需要一个简单函数且只用一次时，lambda能让代码更简洁。
+
+---
+
+## 基本语法
+
+```python
+lambda 参数1, 参数2, ... : 表达式
+```
+
+```python
+# 普通函数
+def add(x, y):
+    return x + y
+
+# 等价的lambda
+add_lambda = lambda x, y: x + y
+
+print(add(2, 3))         # 5
+print(add_lambda(2, 3))  # 5
+```
+
+**特点：**
+
+- 只能包含**一个表达式**，不能写多条语句
+- 表达式的计算结果**自动返回**
+- 通常不命名，即用即走
+
+---
+
+## Lambda vs 普通函数
+
+| 特性 | Lambda | 普通函数 (`def`) |
+|------|--------|------------------|
+| 名称 | 匿名（通常无名字） | 有函数名 |
+| 函数体 | 只能有一个表达式 | 可以有多条语句 |
+| 返回值 | 自动返回表达式结果 | 需要显式 `return` |
+| 适用场景 | 临时、简单的逻辑 | 复杂、复用的逻辑 |
+
+**原则：** 逻辑简单且只用一次 → 用lambda；逻辑复杂或需要复用 → 用`def`。
+
+---
+
+## 应用场景：内置高阶函数
+
+高阶函数是指接收函数作为参数的函数。这是lambda最经典的使用场景。
+
+### `map()` — 映射
+
+对可迭代对象的每个元素执行指定操作，返回结果的迭代器。
+
+```python
+numbers = [1, 2, 3, 4, 5]
+
+# 普通写法
+def square(x):
+    return x ** 2
+
+result = map(square, numbers)
+print(list(result))  # [1, 4, 9, 16, 25]
+
+# lambda写法——更简洁
+result = map(lambda x: x ** 2, numbers)
+print(list(result))  # [1, 4, 9, 16, 25]
+```
+
+**`map()` 相当于：** 对列表每个元素做"转换"。
+
+```python
+# 将字符串列表转为长度列表
+names = ["Alice", "Bob", "Charlie"]
+lengths = map(lambda s: len(s), names)
+print(list(lengths))  # [5, 3, 7]
+
+# 两个列表对应元素相加
+a = [1, 2, 3]
+b = [10, 20, 30]
+sums = map(lambda x, y: x + y, a, b)
+print(list(sums))  # [11, 22, 33]
+```
+
+---
+
+### `filter()` — 过滤
+
+根据条件筛选可迭代对象中的元素，保留满足条件的。
+
+```python
+numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+# 筛选偶数
+evens = filter(lambda x: x % 2 == 0, numbers)
+print(list(evens))  # [2, 4, 6, 8, 10]
+
+# 筛选长度大于3的字符串
+words = ["cat", "elephant", "dog", "butterfly"]
+long_words = filter(lambda s: len(s) > 3, words)
+print(list(long_words))  # ['elephant', 'butterfly']
+```
+
+**`filter()` 相当于：** 按条件"筛选"列表。
+
+```python
+# 筛选正数
+nums = [-2, -1, 0, 1, 2]
+positives = filter(lambda x: x > 0, nums)
+print(list(positives))  # [1, 2]
+```
+
+---
+
+### `sorted()` — 排序（指定key）
+
+`sorted()` 和列表的 `.sort()` 都支持 `key` 参数，用于指定"按什么排序"。
+
+```python
+words = ["banana", "pie", "Washington", "book"]
+
+# 按长度排序
+sorted_by_len = sorted(words, key=lambda s: len(s))
+print(sorted_by_len)  # ['pie', 'book', 'banana', 'Washington']
+
+# 按最后一个字母排序
+sorted_by_last = sorted(words, key=lambda s: s[-1])
+print(sorted_by_last)  # ['banana', 'pie', 'book', 'Washington']
+
+# 降序排序
+sorted_desc = sorted(words, key=lambda s: len(s), reverse=True)
+print(sorted_desc)  # ['Washington', 'banana', 'book', 'pie']
+```
+
+```python
+# 按绝对值排序
+nums = [-5, 2, -8, 1, -9]
+sorted_by_abs = sorted(nums, key=lambda x: abs(x))
+print(sorted_by_abs)  # [1, 2, -5, -8, -9]
+```
+
+---
+
+### `max()` / `min()` — 极值（指定key）
+
+```python
+words = ["apple", "banana", "cherry"]
+
+# 找出最长的单词
+longest = max(words, key=lambda s: len(s))
+print(longest)  # banana
+
+# 找出最短的单词
+shortest = min(words, key=lambda s: len(s))
+print(shortest)  # apple
+```
+
+```python
+students = [
+    {"name": "Alice", "score": 85},
+    {"name": "Bob", "score": 92},
+    {"name": "Charlie", "score": 78}
+]
+
+# 找出分数最高的学生
+top_student = max(students, key=lambda s: s["score"])
+print(top_student)  # {'name': 'Bob', 'score': 92}
+```
+
+---
+
+### `reduce()` — 累积计算
+
+`reduce()` 在 `functools` 模块中，用于将序列逐个累积计算为一个值。
+
+```python
+from functools import reduce
+
+numbers = [1, 2, 3, 4, 5]
+
+# 求和
+total = reduce(lambda x, y: x + y, numbers)
+print(total)  # 15
+
+# 求积
+product = reduce(lambda x, y: x * y, numbers)
+print(product)  # 120
+
+# 求最大值
+maximum = reduce(lambda x, y: x if x > y else y, numbers)
+print(maximum)  # 5
+```
+
+---
+
+## 作业（已完成）
+
+基于下面的产品信息完成练习
+
+```python
+products = [
+  {"name": "iPhone 15", "inc": "APPLE", "price": 5999, "stock": 3012},
+  {"name": "MacBook Pro", "inc": "APPLE", "price": 14999, "stock": 580},
+  {"name": "AirPods Pro", "inc": "APPLE", "price": 1899, "stock": 4500},
+  {"name": "iPad Air", "inc": "APPLE", "price": 4799, "stock": 1200},
+  {"name": "Apple Watch", "inc": "APPLE", "price": 2999, "stock": 2100},
+  {"name": "Galaxy S24", "inc": "SAMSUNG", "price": 5499, "stock": 2800},
+  {"name": "Galaxy Tab", "inc": "SAMSUNG", "price": 3999, "stock": 950},
+  {"name": "Galaxy Buds", "inc": "SAMSUNG", "price": 899, "stock": 3200},
+  {"name": "Galaxy Watch", "inc": "SAMSUNG", "price": 2199, "stock": 1500},
+  {"name": "Mate 60 Pro", "inc": "HUAWEI", "price": 6999, "stock": 800},
+  {"name": "MatePad Pro", "inc": "HUAWEI", "price": 4299, "stock": 1100},
+  {"name": "FreeBuds", "inc": "HUAWEI", "price": 999, "stock": 2600},
+  {"name": "MateBook", "inc": "HUAWEI", "price": 6999, "stock": 670},
+  {"name": "Watch GT", "inc": "HUAWEI", "price": 1488, "stock": 1800},
+  {"name": "Xiaomi 14", "inc": "XIAOMI", "price": 3999, "stock": 3500},
+  {"name": "Redmi K70", "inc": "XIAOMI", "price": 2499, "stock": 4200},
+  {"name": "Mi Pad 6", "inc": "XIAOMI", "price": 1999, "stock": 2000},
+  {"name": "Mi Band 8", "inc": "XIAOMI", "price": 239, "stock": 8000},
+  {"name": "Xiaomi Buds", "inc": "XIAOMI", "price": 499, "stock": 5000},
+  {"name": "Xiaomi Book", "inc": "XIAOMI", "price": 4999, "stock": 890},
+  {"name": "Pixel 8", "inc": "GOOGLE", "price": 4999, "stock": 600},
+  {"name": "Pixel Buds", "inc": "GOOGLE", "price": 1299, "stock": 1500},
+  {"name": "Pixel Watch", "inc": "GOOGLE", "price": 2599, "stock": 900},
+  {"name": "Pixel Tablet", "inc": "GOOGLE", "price": 3499, "stock": 400},
+  {"name": "ThinkPad X1", "inc": "LENOVO", "price": 9999, "stock": 720},
+  {"name": "Legion Y9000", "inc": "LENOVO", "price": 8999, "stock": 1100},
+  {"name": "Tab P12", "inc": "LENOVO", "price": 2499, "stock": 1300},
+  {"name": "Dell XPS 13", "inc": "DELL", "price": 10999, "stock": 650},
+  {"name": "Dell G15", "inc": "DELL", "price": 6999, "stock": 1400},
+  {"name": "Surface Pro", "inc": "MICROSOFT", "price": 8999, "stock": 580},
+  {"name": "Surface Laptop", "inc": "MICROSOFT", "price": 7999, "stock": 700},
+  {"name": "Surface Go", "inc": "MICROSOFT", "price": 3999, "stock": 1200},
+  {"name": "OnePlus 12", "inc": "ONEPLUS", "price": 4299, "stock": 1800},
+  {"name": "OnePlus Buds", "inc": "ONEPLUS", "price": 599, "stock": 3000},
+  {"name": "OnePlus Watch", "inc": "ONEPLUS", "price": 1499, "stock": 1600},
+  {"name": "OPPO Find X7", "inc": "OPPO", "price": 3999, "stock": 2200},
+  {"name": "OPPO Pad 2", "inc": "OPPO", "price": 2999, "stock": 1000},
+  {"name": "OPPO Enco", "inc": "OPPO", "price": 499, "stock": 3500},
+  {"name": "Vivo X100", "inc": "VIVO", "price": 3999, "stock": 2500},
+  {"name": "Vivo Pad 2", "inc": "VIVO", "price": 2499, "stock": 900},
+  {"name": "Vivo TWS", "inc": "VIVO", "price": 399, "stock": 4000},
+]
+```
+
+充分利用本节课学习过的Lambda表达式和内置高阶函数，完成下面的练习
+
+1. 按照价格升序排序
+
+2. 按照价格降序排序
+
+3. 按照库存总额升序排序（库存总额 = 价格 × 库存数量）
+
+4. 找出XIAOMI的所有产品，得到一个字符串列表
+
+5. 找出价格最高的产品所属的公司列表（字符串列表）
+
+7. 得到每家公司产品的平均价格
+   结果示例：
+
+   ```python
+   [
+       {"inc": "HUAWEI", "avg_price": 4156.8},
+       {"inc": "GOOGLE", "avg_price": 3099.0},
+       {"inc": "MICROSOFT", "avg_price": 6999.0},
+       {"inc": "ONEPLUS", "avg_price": 2132.3333333333335},
+       {"inc": "VIVO", "avg_price": 2299.0},
+       {"inc": "XIAOMI", "avg_price": 2372.3333333333335},
+       {"inc": "SAMSUNG", "avg_price": 3149.0},
+       {"inc": "OPPO", "avg_price": 2499.0},
+       {"inc": "DELL", "avg_price": 8999.0},
+       {"inc": "APPLE", "avg_price": 6139.0},
+       {"inc": "LENOVO", "avg_price": 7165.666666666667},
+   ]
+   ```
+
+# Python类和对象
+
+Python 是一门**面向对象**的编程语言。类（Class）是创建对象的蓝图，而对象（Object）是类的具体实例。通过类和对象，可以将数据（属性）和行为（方法）封装在一起，使代码更具结构性和可复用性。
+
+---
+
+## 定义类
+
+使用 `class` 关键字定义类：
+
+```python
+class Dog:
+    pass
+
+# 创建实例
+my_dog = Dog()
+print(type(my_dog))  # <class '__main__.Dog'>
+```
+
+### 使用 `type()` 动态定义类
+
+类本身也是对象，`type()` 是创建类的内置函数。可以动态地创建类：
+
+```python
+# type(类名, (父类元组,), {属性字典})
+
+# 定义方法
+def bark(self):
+    print(f"{self.name} says: Woof!")
+
+# 动态创建 Dog 类
+Dog = type('Dog', (), {'name': 'Buddy', 'bark': bark})
+
+# 创建实例
+my_dog = Dog()
+print(my_dog.name)  # Buddy
+my_dog.bark()       # Buddy says: Woof!
+```
+
+**参数说明：**
+
+- 第一个参数：类名（字符串）
+- 第二个参数：继承的父类元组
+- 第三个参数：类属性和方法的字典
+
+**实际应用场景：** 在 ORM 框架或需要根据配置动态生成类的场景中经常使用。
+
+---
+
+## 构造方法 `__init__`
+
+`__init__` 是类的构造方法，在创建对象时自动调用，用于初始化对象的属性：
+
+```python
+class Dog:
+    def __init__(this, name, age):
+        this.name = name
+        this.age = age
+
+# 创建对象时传入参数
+my_dog = Dog("Buddy", 3)
+print(my_dog.name)  # Buddy
+print(my_dog.age)   # 3
+```
+
+**注意：** `self` 代表对象本身，必须是第一个参数，但调用时不需要传。
+
+---
+
+## 实例属性与类属性
+
+### 实例属性
+
+每个对象独立的属性，通过 `self` 定义：
+
+```python
+class Dog:
+    def __init__(self, name):
+        self.name = name  # 实例属性
+
+dog1 = Dog("Buddy")
+dog2 = Dog("Max")
+
+print(dog1.name)  # Buddy
+print(dog2.name)  # Max
+```
+**注意：** 实例属性存放在实例的__dict__方法上，实例上的__class__属性指向类，因此可以通过实例访问到类属性。
+### 类属性
+
+所有对象共享的属性，在类内部直接定义：
+
+```python
+class Dog:
+    species = "Canis familiaris"  # 类属性
+
+    def __init__(self, name):
+        self.name = name
+
+dog1 = Dog("Buddy")
+dog2 = Dog("Max")
+
+print(dog1.species)  # Canis familiaris
+print(dog2.species)  # Canis familiaris
+
+# 修改类属性（通过类名）
+Dog.species = "Canis lupus"
+print(dog1.species)  # Canis lupus
+```
+**注意：** 类属性存放在类的__dict__方法上。
+**访问规则：** 实例属性通过 `self(实例)` 访问，类属性通过 `类名` 或 `self（实例）` 访问。
+
+---
+## 实例方法
+
+定义在类中的函数，第一个参数必须是 `self`：
+
+```python
+class Dog:
+    def __init__(self, name):
+        self.name = name
+
+    def bark(self):
+        print(f"{self.name} says: Woof!")
+
+    def introduce(self):
+        self.bark()  # 方法内调用其他方法
+        print(f"My name is {self.name}")
+
+my_dog = Dog("Buddy")
+my_dog.bark()       # Buddy says: Woof!
+my_dog.introduce()  # Buddy says: Woof! My name is Buddy
+```
+**注意：** 实例方法存放在类的__dict__方法上，不是在实例的__dict__上。实例方法可以通过类调用。
+
+---
+
+## 类方法与静态方法
+
+### 类方法 `@classmethod`
+
+第一个参数是 `cls`，代表类本身，可以访问或修改类属性：
+
+```python
+class Dog:
+    count = 0  # 类属性：记录创建了多少只狗
+
+    def __init__(self, name):
+        self.name = name
+        Dog.count += 1
+
+    @classmethod
+    def get_count(cls):
+        return cls.count
+
+dog1 = Dog("Buddy")
+dog2 = Dog("Max")
+
+print(Dog.get_count())  # 2
+```
+
+### 静态方法 `@staticmethod`
+
+不接收 `self` 或 `cls`，与普通函数类似，只是组织在类中：
+
+```python
+class MathUtils:
+    @staticmethod
+    def add(a, b):
+        return a + b
+
+    @staticmethod
+    def is_even(n):
+        return n % 2 == 0
+
+print(MathUtils.add(3, 5))      # 8
+print(MathUtils.is_even(4))     # True
+```
+
+**对比：**
+
+| 方法类型 | 装饰器          | 第一个参数 | 访问实例属性 | 访问类属性 |
+| -------- | --------------- | ---------- | ------------ | ---------- |
+| 实例方法 | 无              | `self`     | ✓            | ✓          |
+| 类方法   | `@classmethod`  | `cls`      | ✗            | ✓          |
+| 静态方法 | `@staticmethod` | 无         | ✗            | ✗          |
+
+---
+## 继承
+
+子类继承父类的属性和方法，并可以扩展或重写：
+
+```python
+class Animal:
+    def __init__(self, name):
+        self.name = name
+
+    def speak(self):
+        print("Some sound")
+
+class Dog(Animal):  # Dog 继承 Animal
+    def speak(self):  # 重写父类方法
+        print(f"{self.name} says: Woof!")
+
+class Cat(Animal):
+    def speak(self):
+        print(f"{self.name} says: Meow!")
+
+dog = Dog("Buddy")
+cat = Cat("Kitty")
+
+dog.speak()  # Buddy says: Woof!
+cat.speak()  # Kitty says: Meow!
+```
+
+### 调用父类方法
+
+使用 `super()` 调用父类的方法：
+
+```python
+class Animal:
+    def __init__(self, name):
+        self.name = name
+        print("Animal init")
+
+class Dog(Animal):
+    def __init__(self, name, breed):
+        super().__init__(name)  # 调用父类的 __init__
+        self.breed = breed      # 扩展新属性
+        print("Dog init")
+
+dog = Dog("Buddy", "Golden Retriever")
+print(dog.name)   # Buddy
+print(dog.breed)  # Golden Retriever
+```
+
+### 多继承
+
+Python 支持一个子类同时继承多个父类：
+
+```python
+class Flyable:
+    def fly(self):
+        print("I can fly!")
+
+class Swimmable:
+    def swim(self):
+        print("I can swim!")
+
+class Duck(Flyable, Swimmable):  # 同时继承 Flyable 和 Swimmable
+    pass
+
+duck = Duck()
+duck.fly()   # I can fly!
+duck.swim()  # I can swim!
+```
+**注意：** 父类的获取通过类的__base__属性获取，多个父类通过__bases__属性获取，是否多继承可以看__bases__的数量来判断。
+
+#### 方法解析顺序（MRO）
+
+当多个父类有同名方法时，Python 按照 **MRO**（Method Resolution Order）顺序查找：
+
+```python
+class A:
+    def hello(self):
+        print("Hello from A")
+
+class B(A):
+    def hello(self):
+        print("Hello from B")
+
+class C(A):
+    def hello(self):
+        print("Hello from C")
+
+class D(B, C):  # MRO: D -> B -> C -> A
+    pass
+
+d = D()
+d.hello()  # Hello from B（先找到 B 的方法）
+
+# 查看 MRO 顺序
+print(D.__mro__)
+# (<class 'D'>, <class 'B'>, <class 'C'>, <class 'A'>, <class 'object'>)
+```
+
+#### `super()` 在多继承中的行为
+
+`super()` 按照 MRO 顺序调用**下一个**类的方法，不一定是直接父类：
+
+```python
+class A:
+    def __init__(self):
+        print("A init")
+
+class B(A):
+    def __init__(self):
+        print("B init")
+        super().__init__()  # 调用 C 的 __init__，不是 A
+
+class C(A):
+    def __init__(self):
+        print("C init")
+        super().__init__()  # 调用 A 的 __init__
+
+class D(B, C):
+    def __init__(self):
+        print("D init")
+        super().__init__()  # 调用 B 的 __init__
+
+D()
+# 输出：
+# D init
+# B init
+# C init
+# A init
+```
+
+**注意：** 多继承虽然强大，但过度使用会使代码难以维护。通常优先考虑组合（Composition）代替多继承。
+
+---
+
+## 访问控制
+
+Python 没有严格的私有/公有，但以下划线约定访问权限：
+
+| 命名方式 | 含义             | 访问建议         |
+| -------- | ---------------- | ---------------- |
+| `name`   | 公有             | 可自由访问       |
+| `_name`  | 保护（约定）     | 建议不直接访问   |
+| `__name` | 私有（名称改写） | 外部难以直接访问 |
+
+```python
+class BankAccount:
+    def __init__(self, owner, balance):
+        self.owner = owner          # 公有
+        self._balance = balance     # 保护
+        self.__password = "123456"  # 私有（名称改写为 _BankAccount__password）
+
+    def deposit(self, amount):
+        if amount > 0:
+            self._balance += amount
+
+    def get_balance(self):
+        return self._balance
+
+account = BankAccount("Alice", 1000)
+print(account.owner)      # Alice
+print(account._balance)   # 1000（可以访问，但不建议）
+# print(account.__password)  # AttributeError！
+print(account._BankAccount__password)  # 123456（强行访问）
+```
+
+**注意：** Python 的访问控制基于约定，不是强制。
+## 常见操作
+
+### 内置属性
+
+Python 的类和对象有一些内置属性，用于获取元信息：
+
+| 属性        | 说明                     |
+| ----------- | ------------------------ |
+| `__class__` | 对象所属的类             |
+| `__bases__` | 类的所有直接父类（元组） |
+| `__base__`  | 类的第一个直接父类       |
+| `__dict__`  | 对象或类的属性字典       |
+
+```python
+class Animal:
+    pass
+
+class Dog(Animal):
+    species = "Canis familiaris"
+
+    def __init__(self, name):
+        self.name = name
+
+dog = Dog("Buddy")
+
+# __class__: 查看对象所属的类
+print(dog.__class__)        # <class '__main__.Dog'>
+print(dog.__class__.__name__)  # Dog
+
+# __bases__: 查看类的所有直接父类
+print(Dog.__bases__)        # (<class '__main__.Animal'>,)
+
+# __base__: 查看类的第一个直接父类
+print(Dog.__base__)         # <class '__main__.Animal'>
+
+# __dict__: 查看对象的属性字典
+print(dog.__dict__)         # {'name': 'Buddy'}
+
+# __dict__: 查看类的属性字典（包含方法）
+print(Dog.__dict__.keys())  # dict_keys([..., 'species', '__init__', ...])
+```
+
+---
+
+### `type()`
+
+返回对象的类型（对象是通过哪个类创建的：
+
+```python
+dog = Dog("Buddy")
+
+print(type(dog))       # <class '__main__.Dog'>
+print(type(Dog))       # <class 'type'>
+print(type(123))       # <class 'int'>
+print(type("hello"))   # <class 'str'>
+```
+
+---
+
+### `isinstance()`
+
+判断对象是否是指定类（或其子类）的实例：
+
+```python
+dog = Dog("Buddy")
+
+print(isinstance(dog, Dog))      # True
+print(isinstance(dog, Animal))   # True（Dog 继承 Animal）
+print(isinstance(dog, str))      # False
+
+# 支持元组形式，判断是否为多个类型之一
+print(isinstance(dog, (Dog, Cat)))   # True
+print(isinstance(123, (str, int)))   # True
+```
+
+**与 `type()` 的区别：** `isinstance()` 会考虑继承关系，`type()` 不会。
+
+---
+
+### `issubclass()`
+
+判断一个类是否是另一个类的子类：
+
+```python
+print(issubclass(Dog, Animal))   # True
+print(issubclass(Dog, Dog))      # True（类是自己的子类）
+print(issubclass(Animal, Dog))   # False
+
+# 支持元组
+print(issubclass(Dog, (Animal, str)))  # True
+```
+
+---
+
+### `dir()`
+
+返回对象的所有属性和方法列表（包括继承的）：
+
+```python
+dog = Dog("Buddy")
+
+# 查看对象的所有属性和方法
+print(dir(dog))
+# ['__class__', '__delattr__', ..., 'name', 'species']
+
+# 查看类的所有属性和方法
+print(dir(Dog))
+
+# 不带参数时，返回当前作用域的所有名称
+print(dir())
+```
+
+---
+
+### `vars()`
+
+返回对象的 `__dict__` 属性，即对象的属性字典：
+
+```python
+dog = Dog("Buddy")
+
+print(vars(dog))        # {'name': 'Buddy'}
+print(vars(Dog))        # 类的 __dict__
+print(dog.__dict__)     # 等同于 vars(dog)
+
+# 不带参数时，等同于 locals()
+print(vars())
+```
+
+---
+
+### `getattr()`
+
+获取对象的属性值，属性不存在时可返回默认值。**会沿着继承链查找属性（包括实例属性、类属性、父类属性）：**
+
+```python
+class Animal:
+    species = "Animal"
+
+    def speak(self):
+        return "Some sound"
+
+class Dog(Animal):
+    def __init__(self, name):
+        self.name = name
+
+dog = Dog("Buddy")
+
+# 查找实例属性
+print(getattr(dog, "name"))           # Buddy
+
+# 查找类属性
+print(getattr(dog, "species"))        # Animal（继承自父类）
+
+# 查找父类方法
+print(getattr(dog, "speak")())       # Some sound
+
+# 属性不存在时，提供默认值
+print(getattr(dog, "age", 3))         # 3（默认值）
+
+# 等价于
+dog.name
+dog.species
+dog.speak()
+```
+
+---
+
+### `setattr()`
+
+设置对象的属性值，属性不存在时会创建。**如果父类定义了描述符（如 `@property.setter`）或 `__setattr__` 方法，会遵循继承链上的这些机制：**
+
+```python
+dog = Dog("Buddy")
+
+setattr(dog, "age", 3)
+print(dog.age)            # 3
+
+# 等价于
+dog.age = 3
+
+# 可以动态设置属性名
+attr_name = "breed"
+setattr(dog, attr_name, "Golden Retriever")
+print(dog.breed)          # Golden Retriever
+```
+
+---
+
+### `hasattr()`
+
+判断对象是否有指定属性。**会检查继承链上的所有属性：**
+
+```python
+dog = Dog("Buddy")
+
+# 实例属性
+print(hasattr(dog, "name"))       # True
+
+# 继承的类属性
+print(hasattr(dog, "species"))    # True（继承自 Animal）
+
+# 继承的方法
+print(hasattr(dog, "speak"))      # True（继承自 Animal）
+
+# 不存在的属性
+print(hasattr(dog, "age"))        # False
+
+# 常用于安全地访问属性前进行检查
+if hasattr(dog, "name"):
+    print(dog.name)
+```
+
+---
+
+### `delattr()`
+
+删除对象的属性：
+
+```python
+dog = Dog("Buddy")
+
+# 添加一个属性
+setattr(dog, "age", 3)
+print(dog.age)            # 3
+
+# 删除属性
+delattr(dog, "age")
+# print(dog.age)          # AttributeError!
+
+# 等价于
+del dog.age
+```
+## 作业(已完成)
+
+### 一、腾讯面试题
+
+说出下面代码的打印结果
+
+```python
+class Base(object):
+    def __init__(self):
+        print("enter Base")
+        print("leave Base")
+
+class A(Base):
+    def __init__(self):
+        print("enter A")
+        super().__init__()
+        print("leave A")
+
+class B(Base):
+    def __init__(self):
+        print("enter B")
+        super().__init__()
+        print("leave B")
+
+class C(A, B):
+    def __init__(self):
+        print("enter C")
+        super().__init__()
+        print("leave C")
+
+c = C()
+```
+
+### 二、综合预测题
+
+说出下面代码的打印结果
+
+```python
+class Animal:
+    kingdom = "Animalia"
+
+    def __init__(self, name):
+        self.name = name
+
+class Dog(Animal):
+    count = 0
+
+    def __init__(self, name, age):
+        super().__init__(name)
+        self.age = age
+        Dog.count += 1
+
+    def bark(self):
+        return f"{self.name} says Woof!"
+
+dog1 = Dog("Buddy", 3)
+dog2 = Dog("Max", 5)
+
+print(type(dog1))
+print(type(Dog))
+print(isinstance(dog1, Animal))
+print(isinstance(dog1, (int, Dog)))
+print(issubclass(Dog, object))
+print(dog1.__class__.__name__)
+print(Dog.__base__.__name__)
+print(hasattr(dog1, "kingdom"))
+print(getattr(dog1, "age"))
+print(getattr(dog2, "color", "brown"))
+setattr(dog1, "color", "golden")
+print(dog1.color)
+print("bark" in dir(dog1))
+print(vars(dog2))
+delattr(dog1, "color")
+print(hasattr(dog1, "color"))
+print(Dog.count)
+```
+
+### 三、实现链表类
+
+请实现一个单链表类 `LinkedList`，支持以下操作：
+
+**需要实现的方法：**
+
+| 方法                     | 说明                                                         |
+| ------------------------ | ------------------------------------------------------------ |
+| `__init__(data=None)`    | 初始化空链表；`data` 可以是列表、元组或集合，其中的值会被初始化为链表的节点 |
+| `traverse(callback)`     | 遍历链表，对每个节点值调用 `callback(index, value)`          |
+| `__str__()`              | 返回链表的字符串表示，如 `"1 -> 2 -> 3"`                     |
+| `to_list()`              | 将链表转换为 Python 列表并返回                               |
+| `append(value)`          | 在链表尾部添加一个新节点                                     |
+| `prepend(value)`         | 在链表头部添加一个新节点                                     |
+| `insert(index, value)`   | 在指定索引位置插入新节点，索引从 0 开始                      |
+| `delete_by_value(value)` | 删除第一个值等于 `value` 的节点，返回是否删除成功            |
+| `delete_by_index(index)` | 删除指定索引位置的节点，返回被删除的值，索引越界时返回 `None` |
+| `find(value)`            | 查找值等于 `value` 的节点，返回其索引，不存在返回 -1         |
+| `get(index)`             | 获取指定索引位置的值，索引越界时返回 `None`                  |
+| `get_length()`           | 返回链表长度                                                 |
+| `is_empty()`             | 判断链表是否为空                                             |
+
+**提示：** 你可能需要先定义一个 `Node` 类来表示链表节点。
+---
+
+# 对象的类型
+
+## 知识补充
+
+### 使用 `type()` 动态定义类
+
+类本身也是对象，`type()` 是创建类的内置函数。可以动态地创建类：
+
+```python
+# type(类名, (父类元组,), {属性字典})
+
+# 定义方法
+def bark(self):
+    print(f"{self.name} says: Woof!")
+
+# 动态创建 Dog 类
+Dog = type('Dog', (), {'name': 'Buddy', 'bark': bark})
+
+# 创建实例
+my_dog = Dog()
+print(my_dog.name)  # Buddy
+my_dog.bark()       # Buddy says: Woof!
+```
+
+**参数说明：**
+
+- 第一个参数：类名（字符串）
+- 第二个参数：继承的父类元组
+- 第三个参数：类属性和方法的字典
+
+**实际应用场景：** 在 ORM 框架或需要根据配置动态生成类的场景中经常使用。
+
+### MRO
+
+```python
+class A:
+    pass
+
+
+class B(A):
+    pass
+
+
+class C(A):
+    pass
+
+
+class D(B, C):
+    pass
+
+
+print(D.__mro__)  # (D, B, C, A)
+print(D.mro())  # (D, B, C, A)  和 __mro__一样
+print(D.__bases__)  # (B, C)
+print(D.__base__)  # B，取__bases__第一个
+```
+
+### 类中的私有成员
+
+```python
+# 以下规则适用于所有成员
+
+
+class A:
+    _a = 1  # 约定私有成员，外部仍然可以访问，大部分情况用它
+    __a = 2  # 严格私有成员，外部无法直接访问__a（实际上可以访问，被改名字了。变成了_A__a,依然存储在类的__dict__属性上）
+    __a__ = 3  # 有特殊作用的成员，往往是系统内置的
+
+    @classmethod
+    def test(cls):
+        print(cls._a, cls.__a, cls.__a__)  # 内部可以访问所有成员
+
+
+A.test()  # 1 2 3
+print(A._a, A.__a, A.__a__)  # __a访问不到，其他可以
+```
+
+## 对象的类型
+
+所有的对象都是通过类创建的，创建对象的类，称之为该对象的类型（也有所属类的说法）
+
+可以使用`type(对象)`得到某个对象的类型
+
+
+
+![基础类.excalidraw](https://resource.duyiedu.com/yuanjin/202605181745106.svg)
+
+- 所有函数的类型是`function`（类的方法类型是method,method内部包装了一层function,所以还是认为是function）
+- 所有类的类型是`type`
+- **创建类的类，称之为元类（metaclass）**
+
+> 见`demo1.py`的打印结果
+
+## 成员的查找顺序
+
+**类成员的查找顺序**
+
+1. 查找自身的MRO链条
+2. 查找元类的MRO链条
+
+
+
+**其他实例的查找顺序**
+
+1. 查找自身
+2. 查找类型的MRO链条
+
+## 作业(已完成)
+
+### 使用费曼学习法，复述本节课内容
+
+### 说出代码的查看结果
+
+```python
+function = type(lambda: None)
+
+# type
+print("type(type)", type(type))
+print("isinstance(type, type)", isinstance(type, type))
+print("isinstance(type, function)", isinstance(type, function))
+print("isinstance(type, object)", isinstance(type, object))
+print("\n")
+
+# object
+print("type(object)", type(object))
+print("isinstance(object, type)", isinstance(object, type))
+print("isinstance(object, function)", isinstance(object, function))
+print("\n")
+
+# function
+print("type(function)", type(function))
+print("isinstance(function, object)", isinstance(function, object))
+print("isinstance(function, type)", isinstance(function, type))
+print("isinstance(function, function)", isinstance(function, function))
+print("\n")
+
+
+# 普通对象和类
+class A:
+    pass
+
+
+a = A()
+print("type(a)", type(a))
+print("type(A)", type(A))
+print("isinstance(A, A)", isinstance(A, A))
+print("isinstance(A, object)", isinstance(A, object))
+print("isinstance(A, type)", isinstance(A, type))
+print("isinstance(A, function)", isinstance(A, function))
+print("isinstance(a, A)", isinstance(a, A))
+print("isinstance(a, object)", isinstance(a, object))
+print("isinstance(a, type)", isinstance(a, type))
+print("isinstance(a, function)", isinstance(a, function))
+print("\n")
+
+
+# 普通函数
+def func():
+    pass
+
+
+print("type(func)", type(func))
+print("isinstance(func, object)", isinstance(func, object))
+print("isinstance(func, type)", isinstance(func, type))
+print("isinstance(func, function)", isinstance(func, function))
+print("\n")
+```
+
+# 对象的创建过程
+
+下面是对象创建的伪代码
+
+```python
+def create_object(cls, *args, **kwargs):
+    # 1. 调用 __new__ 创建实例
+    obj = cls.__new__(cls, *args, **kwargs)
+
+    # 2. 类型检查：只有 obj 是 cls 的实例（或其子类的实例）时才调用 __init__
+    if isinstance(obj, cls):
+        obj.__init__(*args, **kwargs)
+
+    # 3. 返回对象
+    return obj
+
+
+# 测试
+class Person:
+    def __init__(self, name, age):
+        self.name = name
+        self.age = age
+
+    def sayHi(self):
+        print(f"my name is {self.name}, I'm {self.age} years old")
+
+p = create_object(Person, "shae", 5)
+p.sayHi()
+```
+
+## 应用场景
+
+理解对象的创建过程后，我们可以通过重写 `__new__` 和 `__init__` 来实现多种设计模式。
+
+### 1. 单例模式
+
+确保一个类只有一个实例：
+
+```python
+class Database:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+# 测试
+conn1 = Database()
+conn2 = Database()
+print(conn1 is conn2)  # True，说明是同一个实例
+```
+
+### 2. 对象池/缓存
+
+复用已有对象，避免重复创建：
+
+```python
+class ConnectionPool:
+    _pool = {}
+
+    def __new__(cls, conn_id):
+        if conn_id not in cls._pool:
+            obj = super().__new__(cls)
+            cls._pool[conn_id] = obj
+        return cls._pool[conn_id]
+
+# 测试
+pool1 = ConnectionPool("conn_1")
+pool2 = ConnectionPool("conn_1")
+pool3 = ConnectionPool("conn_2")
+print(pool1 is pool2)  # True，相同 conn_id 返回同一个对象
+print(pool1 is pool3)  # False，不同 conn_id 返回不同对象
+```
+
+### 3. 正整数（带默认值回退）
+
+`__new__` 可以返回不同类型的对象。当返回的对象不是当前类的实例时，`__init__` 不会被执行：
+
+```python
+class PositiveInt:
+    def __new__(cls, value):
+        if value < 0:
+            return 0  # 返回 int 类型的 0，不是 PositiveInt 的实例
+        return super().__new__(cls)
+
+    def __init__(self, value):
+        print("PositiveInt.__init__ 被调用")
+        self.value = value
+
+# 测试
+p = PositiveInt(5)
+print(type(p))    # <class '__main__.PositiveInt'>
+print(p.value)    # 5
+
+n = PositiveInt(-3)
+print(type(n))    # <class 'int'>
+print(n)          # 0
+```
+
+## 作业（已完成）
+
+自己写一遍：单例模式
+
+# 可调用对象
+
+在 Python 中，**可调用对象（Callable）**是指可以像函数一样使用括号 `()` 调用的对象。
+
+## 如何判断对象是否可调用
+
+使用内置函数 `callable()`：
+
+```python
+print(callable(len))        # True，内置函数
+print(callable(int))        # True，类
+print(callable([1, 2]))     # False，列表不可调用
+print(callable(lambda: 1))  # True，lambda 表达式
+```
+
+函数是最常见的可调用对象：
+
+```python
+def greet(name):
+    return f"Hello, {name}!"
+
+print(callable(greet))  # True
+print(greet("Alice"))   # Hello, Alice!
+```
+
+类也是可调用对象：
+
+```python
+class Dog:
+    def __init__(self, name):
+        self.name = name
+
+print(callable(Dog))    # True
+my_dog = Dog("Buddy")   # 调用类，创建实例
+print(my_dog.name)      # Buddy
+```
+
+## 让对象变成可调用对象
+
+在类中定义 `__call__` 方法，**实例**就变成了可调用对象：
+
+```python
+class Adder:
+    def __init__(self, n):
+        self.n = n
+
+    def __call__(self, x):
+        return self.n + x
+
+add_5 = Adder(5)
+print(callable(add_5))   # True
+# add_5(10) 等效于 Adder.__call__(add_5, 10)
+print(add_5(10))         # 15，像函数一样调用
+print(add_5(100))        # 105
+```
+
+**关键理解：**
+
+- `__call__` 让**实例**可以像函数一样被调用（因此上一章讲到的对象创建过程的伪代码，其实就是写到__call__方法中的）
+- 调用实例时，传入的参数会传给 `__call__` 方法
+
+## 实际应用场景
+
+### 1. 实现可配置的函数对象
+
+```python
+class Multiplier:
+    def __init__(self, factor):
+        self.factor = factor
+
+    def __call__(self, value):
+        return self.factor * value
+
+double = Multiplier(2)
+triple = Multiplier(3)
+
+print(double(5))   # 10
+triple(5)   # 15
+```
+
+### 2. 实现状态保持的回调函数
+
+```python
+class Logger:
+    def __init__(self, prefix):
+        self.prefix = prefix
+        self.log_count = 0
+
+    def __call__(self, message):
+        self.log_count += 1
+        print(f"[{self.prefix}] #{self.log_count}: {message}")
+
+error_log = Logger("ERROR")
+error_log("文件未找到")     # [ERROR] #1: 文件未找到
+error_log("网络连接失败")   # [ERROR] #2: 网络连接失败
+```
+
+## 作业（已完成）
+
+### 一、实现一个计数器类
+
+编写一个 `Counter` 类：
+
+1. 初始化时指定起始值
+2. 每次调用实例，计数器值加 1
+3. 支持 `reset()` 方法重置为初始值
+4. 支持 `get()` 方法获取当前值
+
+```python
+c = Counter(10)
+print(c())      # 11
+c()             # 12
+print(c.get())  # 12
+c.reset()
+print(c.get())  # 10
+```
+
+### 二、思考题
+
+下面代码的输出是什么？为什么？
+
+```python
+class A:
+    def __call__(self):
+        print("A called")
+
+class B(A):
+    def __call__(self):
+        print("B called")
+        super().__call__()
+
+b = B()
+b()
+```
+# 元类
+
+
+
+## 类的创建过程
+
+使用 `class` 关键字定义类时，Python 底层会调用元类来创建类：
+
+```python
+class Dog:
+    pass
+
+
+# 等效于
+class Dog(metaclass=type):
+    pass
+
+
+# 等效于
+Dog = type("Dog", (), {})
+
+# 等效于
+Dog = type.__call__(type, "Dog", (), {})
+```
+
+也就是说，`class` 关键字只是语法糖，底层仍然是通过 `type()` 创建类。
+
+---
+
+## 自定义元类
+
+通过继承 `type`，可以自定义元类，控制类的创建过程。
+
+```python
+class MyMeta(type):
+    def __new__(mcs, name, bases, namespace):
+        print(f"正在创建类: {name}")
+        print(f"父类: {bases}")
+        print(f"属性: {list(namespace.keys())}")
+
+        # 必须调用 type.__new__ 来真正创建类
+        cls = super().__new__(mcs, name, bases, namespace)
+        return cls
+
+
+# 使用 metaclass 参数指定元类
+class Dog(metaclass=MyMeta):
+    species = "Canis familiaris"
+
+    def bark(self):
+        print("Woof!")
+
+
+# 等效于
+# def bark(self):
+#     print("Woof!")
+
+
+# Dog = type.__call__(MyMeta, "Dog", (), {"species": "Canis familiaris", "bark": bark})
+
+# 输出：
+# 正在创建类: Dog
+# 父类: ()
+# 属性: ['__module__', '__qualname__', 'species', 'bark']
+```
+
+**参数说明：**
+
+- `mcs`：元类自身（类似类方法中的 `cls`）
+- `name`：类名字符串
+- `bases`：父类元组
+- `namespace`：类属性的字典
+
+## 深入：元类的查找顺序
+
+子类会继承父类的元类：
+
+```python
+class MyMeta(type):
+    pass
+
+class Base(metaclass=MyMeta):
+    pass
+
+class Child(Base):  # 自动继承 MyMeta
+    pass
+
+print(type(Child))  # <class '__main__.MyMeta'>
+```
+
+如果父类元类不兼容，需要使用更通用的元类：
+
+```python
+class MetaA(type):
+    pass
+
+class MetaB(type):
+    pass
+
+class A(metaclass=MetaA):
+    pass
+
+class B(metaclass=MetaB):
+    pass
+
+# class C(A, B): pass  # TypeError! 元类冲突
+
+# 解决方法：创建兼容的元类
+class CommonMeta(MetaA, MetaB):
+    pass
+
+class C(A, B, metaclass=CommonMeta):  # 正常
+    pass
+```
+
+
+
+## 总结
+
+| 概念 | 说明 |
+| ---- | ---- |
+| 元类 | 创建类的类，默认是 `type` |
+| `__new__` | 创建类，返回类对象 |
+| `__init__` | 初始化类，无返回值 |
+| `__call__` | 控制类的实例化过程 |
+| 应用场景 | 命名检查、自动注册、方法增强、ORM 等 |
+
+---
+
+## 作业（已完成）
+
+### 一、实现单例元类
+
+编写一个元类 `SingletonMeta`，使得任何使用该元类的类都自动成为单例模式：
+
+```python
+class SingletonMeta(type):
+    # 你的代码
+    pass
+
+class Database(metaclass=SingletonMeta):
+    def __init__(self, host):
+        self.host = host
+
+db1 = Database("localhost")
+db2 = Database("remote")
+print(db1 is db2)  # 应该输出 True
+print(db1.host)    # 应该输出 localhost
+```
+
+### 二、自动注册子类
+
+编写一个元类 `PluginMeta`，使得任何继承自 `Plugin` 的子类都会被自动注册到 `PluginMeta.registry` 字典中（键为类名，值为类本身）：
+
+```python
+class PluginMeta(type):
+    # 你的代码
+    pass
+
+class Plugin(metaclass=PluginMeta):
+    pass
+
+class ImagePlugin(Plugin):
+    pass
+
+class TextPlugin(Plugin):
+    pass
+
+print(PluginMeta.registry)
+# 应该输出类似：{'ImagePlugin': <class '__main__.ImagePlugin'>, 'TextPlugin': <class '__main__.TextPlugin'>}
+```
+
+### 三、为所有方法添加日志
+
+编写一个元类 `LogMeta`，自动为类中每个非私有方法（即不以 `_` 开头的方法）添加执行日志。调用方法时，先打印 `[LOG] 调用 {方法名}`，再执行原方法：
+
+```python
+class LogMeta(type):
+    # 你的代码
+    pass
+
+class Calculator(metaclass=LogMeta):
+    def add(self, a, b):
+        return a + b
+    
+    def sub(self, a, b):
+        return a - b
+
+calc = Calculator()
+print(calc.add(3, 5))
+print(calc.sub(10, 4))
+
+# 应该输出：
+# [LOG] 调用 add
+# 8
+# [LOG] 调用 sub
+# 6
+```
+
+# 装饰器
+
+
+
+## 装饰器的本质
+
+装饰器本质上是一个接受函数作为参数并返回新函数的高阶函数：
+
+```python
+def my_decorator(func):
+    def wrapper():
+        print("函数执行前")
+        func()
+        print("函数执行后")
+    return wrapper
+
+# 下面的代码
+def say_hello():
+    print("Hello!")
+say_hello = my_decorator(say_hello)
+
+# 等效于
+@my_decorator
+def say_hello():
+    print("Hello!")
+
+say_hello()
+# 输出：
+# 函数执行前
+# Hello!
+# 函数执行后
+```
+
+
+
+**装饰器是一个可调用对象，接收一个可调用对象，返回任意对象。但为了保证程序能正常运行，通常返回另一个可调用对象来替代原对象。**
+
+
+
+## 多个装饰器叠加
+
+可以同时使用多个装饰器，执行顺序为从下到上：
+
+```python
+@decorator_a
+@decorator_b
+def func():
+    pass
+
+# 等效于：
+# func = decorator_a(decorator_b(func))
+```
+
+## 作业（已完成）
+
+> **前置知识：** 本章作业中会用到 `time` 模块的两个功能：
+> - `time.time()`：返回当前时间的时间戳（一个浮点数）
+> - `time.sleep(seconds)`：让程序暂停执行指定的秒数
+>
+> 例如：
+> ```python
+> import time
+>
+> start = time.time()
+> time.sleep(1)
+> elapsed = time.time() - start
+> print(f"耗时: {elapsed} 秒")
+> ```
+
+### 一、实现timer装饰器
+
+```python
+import time
+
+def timer(func):
+    # 你的代码
+    pass
+
+@timer
+def slow_function():
+    time.sleep(1)
+    return "Done"
+
+slow_function()
+# 输出：slow_function 执行时间: 1.0012 秒
+```
+
+
+
+### 二、实现wraps装饰器
+
+实现wraps装饰器，用于不改变函数的名称和注释
+
+```python
+# 实现wraps装饰器，用于不改变函数的名称和注释
+
+
+def wraps(func):
+    # 你的代码
+    pass
+
+
+def my_decorator(func):
+    @wraps(func)
+    def wrapper():
+        print("函数执行前")
+        func()
+        print("函数执行后")
+
+    return wrapper
+
+
+@my_decorator
+def say_hello():
+    """打招呼"""
+    print("Hello!")
+
+
+say_hello()
+# 输出：
+# 函数执行前
+# Hello!
+# 函数执行后
+print("name", say_hello.__name__)
+print("doc", say_hello.__doc__)
+```
+
+### 三、实现repeat装饰器
+
+```python
+def repeat(n):
+    # 你的代码
+    pass
+
+
+@repeat(3)
+def say_hello(s):
+    print(s)
+
+
+say_hello(1)  # 输出: 1 1 1
+```
+
+### 四、实现cache装饰器
+
+编写一个装饰器 `cache`，缓存函数的计算结果。当使用相同的参数调用函数时，直接返回缓存的结果：
+
+```python
+def cache(func):
+    # 你的代码
+    pass
+
+@cache
+def fibonacci(n):
+    if n < 2:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
+
+print(fibonacci(35))  # 应该快速返回结果
+```
+
+**提示：** 使用字典存储参数到结果的映射。
+
+
+
+### 五、实现to_dict装饰器
+
+编写一个类装饰器 `to_dict`，自动为类生成 `to_dict` 方法，该方法可以将对象转换为字典
+
+```python
+def to_dict(cls):
+    # 你的代码
+    pass
+
+@to_dict
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+p = Point(3, 4)
+print(p.to_dict())  # 应该输出: {"x":3, "y":4}
+```
+# 魔术方法
+
+魔术方法（Magic Methods）是 Python 中**以双下划线开头和结尾**的特殊方法，如 `__init__`、`__str__`。它们不需要显式调用，而是由 Python 在特定场景下**自动触发**。
+
+## 字符串表示
+
+当使用 `print()`、`str()` 或 `repr()` 时，Python 会自动调用对应的魔术方法：
+
+```python
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __str__(self):
+        """面向用户，友好的可读格式"""
+        return f"Point({self.x}, {self.y})"
+
+    def __repr__(self):
+        """面向开发者，精确的重建格式"""
+        return f"Point({self.x!r}, {self.y!r})"
+
+
+p = Point(3, 4)
+print(p)           # Point(3, 4) —— 调用 __str__
+print(str(p))      # Point(3, 4) —— 调用 __str__
+print(repr(p))     # Point(3, 4) —— 调用 __repr__
+
+# 交互式环境中直接显示对象，调用 __repr__
+# p  # Point(3, 4)
+```
+
+**建议：** 两个方法都实现。如果只实现 `__repr__`，`__str__` 会回退到使用它。
+
+---
+
+## 比较操作
+
+通过实现比较魔术方法，可以让自定义对象支持 `==`、`<`、`>` 等操作：
+
+```python
+class Person:
+    def __init__(self, name, age):
+        self.name = name
+        self.age = age
+
+    def __eq__(self, other):
+        """=="""
+        if not isinstance(other, Person):
+            return NotImplemented
+        return self.age == other.age
+
+    def __lt__(self, other):
+        """<"""
+        if not isinstance(other, Person):
+            return NotImplemented
+        return self.age < other.age
+
+    def __le__(self, other):
+        """<="""
+        return self < other or self == other
+
+    def __gt__(self, other):
+        """>"""
+        return not self <= other
+
+    def __ge__(self, other):
+        """>="""
+        return not self < other
+
+    def __ne__(self, other):
+        """!="""
+        return not self == other
+
+    def __repr__(self):
+        return f"Person({self.name!r}, {self.age})"
+
+
+alice = Person("Alice", 30)
+bob = Person("Bob", 25)
+
+print(alice == bob)  # False   
+print(alice > bob)   # True
+print(alice <= bob)  # False
+
+# 实现了比较方法后，可以使用 sorted
+people = [bob, alice]
+print(sorted(people))  # [Person('Bob', 25), Person('Alice', 30)]
+```
+
+**简化方案：** 使用 `@functools.total_ordering` 装饰器，只需实现 `__eq__` 和其中一个（如 `__lt__`），其余会自动推导：
+
+```python
+from functools import total_ordering
+
+@total_ordering
+class Person:
+    def __init__(self, name, age):
+        self.name = name
+        self.age = age
+
+    def __eq__(self, other):
+        if not isinstance(other, Person):
+            return NotImplemented
+        return self.age == other.age
+
+    def __lt__(self, other):
+        if not isinstance(other, Person):
+            return NotImplemented
+        return self.age < other.age
+
+    def __repr__(self):
+        return f"Person({self.name!r}, {self.age})"
+```
+
+---
+
+## 算术运算
+
+让对象支持 `+`、`-`、`*`、`/` 等运算符：
+
+```python
+class Vector:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __add__(self, other):
+        """+"""
+        if isinstance(other, Vector):
+            return Vector(self.x + other.x, self.y + other.y)
+        return NotImplemented  # 返回 NotImplemented，让 Python 尝试 other 的 __radd__
+
+    def __sub__(self, other):
+        """-"""
+        if isinstance(other, Vector):
+            return Vector(self.x - other.x, self.y - other.y)
+        return NotImplemented
+
+    def __mul__(self, scalar):
+        """*，向量与标量相乘"""
+        if isinstance(scalar, (int, float)):
+            return Vector(self.x * scalar, self.y * scalar)
+        return NotImplemented
+
+    def __rmul__(self, scalar):
+        """右乘：scalar * vector"""
+        return self * scalar  # 复用 __mul__
+
+    def __truediv__(self, scalar):
+        """/"""
+        if isinstance(scalar, (int, float)):
+            return Vector(self.x / scalar, self.y / scalar)
+        return NotImplemented
+
+    def __neg__(self):
+        """负号：-vector"""
+        return Vector(-self.x, -self.y)
+
+    def __abs__(self):
+        """abs()"""
+        return (self.x ** 2 + self.y ** 2) ** 0.5
+
+    def __repr__(self):
+        return f"Vector({self.x}, {self.y})"
+
+
+v1 = Vector(1, 2)
+v2 = Vector(3, 4)
+
+print(v1 + v2)       # Vector(4, 6)
+print(v2 - v1)       # Vector(2, 2)
+print(v1 * 3)        # Vector(3, 6)
+print(2 * v1)        # Vector(2, 4) —— 调用 __rmul__
+print(-v1)           # Vector(-1, -2)
+print(abs(v1))       # 2.236...
+```
+
+**常用算术魔术方法：**
+
+| 运算符 | 魔术方法 | 说明 |
+|--------|----------|------|
+| `+` | `__add__` | 加法 |
+| `-` | `__sub__` | 减法 |
+| `*` | `__mul__` | 乘法 |
+| `/` | `__truediv__` | 真除法 |
+| `//` | `__floordiv__` | 整除 |
+| `%` | `__mod__` | 取模 |
+| `**` | `__pow__` | 幂运算 |
+| `+a` | `__pos__` | 正号 |
+| `-a` | `__neg__` | 负号 |
+| `abs()` | `__abs__` | 绝对值 |
+
+---
+
+## 容器协议
+
+实现容器协议，让自定义对象可以像 `list`、`dict` 一样使用 `[]`、 `len()`、`in` 等操作：
+
+```python
+class ShoppingCart:
+    def __init__(self):
+        self._items = []
+
+    def __len__(self):
+        """len(cart)"""
+        return len(self._items)
+
+    def __getitem__(self, index):
+        """cart[index]"""
+        return self._items[index]
+
+    def __setitem__(self, index, value):
+        """cart[index] = value"""
+        self._items[index] = value
+
+    def __delitem__(self, index):
+        """del cart[index]"""
+        del self._items[index]
+
+    def __contains__(self, item):
+        """item in cart"""
+        return item in self._items
+
+    def __iter__(self):
+        """for item in cart"""
+        return iter(self._items)
+
+    def append(self, item):
+        self._items.append(item)
+
+    def __repr__(self):
+        return f"ShoppingCart({self._items!r})"
+
+
+cart = ShoppingCart()
+cart.append("apple")
+cart.append("banana")
+cart.append("orange")
+
+print(len(cart))           # 3
+print(cart[0])             # apple
+print(cart[1:])            # ['banana', 'orange'] —— 支持切片
+print("apple" in cart)     # True
+
+for item in cart:
+    print(item)
+# apple
+# banana
+# orange
+```
+
+---
+
+## 类型转换
+
+实现类型转换魔术方法，让对象支持 `int()`、`float()`、`bool()` 等转换：
+
+```python
+class Money:
+    def __init__(self, amount):
+        self.amount = amount
+
+    def __int__(self):
+        return int(self.amount)
+
+    def __float__(self):
+        return float(self.amount)
+
+    def __bool__(self):
+        return self.amount != 0
+
+    def __repr__(self):
+        return f"Money({self.amount})"
+
+
+m = Money(100.5)
+print(int(m))      # 100
+print(float(m))    # 100.5
+print(bool(m))     # True
+
+m0 = Money(0)
+print(bool(m0))    # False
+```
+
+---
+
+## 属性访问拦截
+
+通过实现属性访问相关的魔术方法，可以拦截对对象属性的**读取**、**设置**和**删除**操作：
+
+```python
+class Config:
+    def __init__(self):
+        # 必须用 object.__setattr__，否则会无限递归
+        object.__setattr__(self, "_data", {})
+
+    def __getattr__(self, name):
+        """访问不存在的属性时触发"""
+        if name in self._data:
+            return self._data[name]
+        raise AttributeError(f"'{type(self).__name__}' 对象没有属性 '{name}'")
+
+    def __setattr__(self, name, value):
+        """设置任意属性时触发"""
+        if name.startswith("_"):
+            # 内部属性直接设置，避免递归
+            object.__setattr__(self, name, value)
+        else:
+            self._data[name] = value
+
+    def __delattr__(self, name):
+        """删除属性时触发"""
+        if name in self._data:
+            del self._data[name]
+        else:
+            raise AttributeError(f"'{type(self).__name__}' 对象没有属性 '{name}'")
+
+    def __repr__(self):
+        return f"Config({self._data!r})"
+
+
+cfg = Config()
+cfg.debug = True      # 调用 __setattr__
+cfg.port = 8080       # 调用 __setattr__
+print(cfg.debug)      # True —— 调用 __getattr__
+print(cfg.port)       # 8080 —— 调用 __getattr__
+del cfg.debug         # 调用 __delattr__
+print(cfg)            # Config({'port': 8080})
+```
+
+**注意：** `__setattr__` 拦截**所有**属性设置。如果在其内部使用 `self.xxx = value` 的方式赋值，会再次触发 `__setattr__`，导致**无限递归**。应使用 `object.__setattr__(self, name, value)` 来绕过拦截。
+
+---
+
+### `__getattr__` vs `__getattribute__`
+
+- `__getattr__`：**仅**在访问**不存在**的属性时触发
+- `__getattribute__`：访问**任何**属性时都会触发（更底层，优先级更高）
+
+```python
+class Demo:
+    def __init__(self):
+        self.existing = 100
+
+    def __getattribute__(self, name):
+        """所有属性访问都会经过这里"""
+        print(f"正在访问: {name}")
+        # 必须用 object.__getattribute__，否则会无限递归
+        return object.__getattribute__(self, name)
+
+    def __getattr__(self, name):
+        """只有访问不存在的属性时才到这里"""
+        return f"'{name}' 不存在，返回默认值"
+
+
+d = Demo()
+print(d.existing)   # 先触发 __getattribute__，返回 100
+print(d.missing)    # 先触发 __getattribute__，找不到，再触发 __getattr__
+```
+
+**⚠️ 警告：** 在 `__getattribute__` 中再次访问 `self.xxx` 也会触发自身，必须使用 `object.__getattribute__(self, name)`。
+
+---
+
+## 对象生命周期
+
+除了 `__init__`，还有 `__del__` 在对象被销毁时调用：
+
+```python
+class DatabaseConnection:
+    def __init__(self, db_name):
+        self.db_name = db_name
+        print(f"连接到数据库: {db_name}")
+
+    def __del__(self):
+        """对象被销毁时调用"""
+        print(f"关闭数据库连接: {self.db_name}")
+
+
+conn = DatabaseConnection("test_db")
+del conn  # 关闭数据库连接: test_db
+```
+
+**注意：** `__del__` 的调用时机不确定（取决于垃圾回收），不应依赖它做关键清理。对于资源管理，应使用**上下文管理器**（后续课程讲）。
+
+---
+
+## 常用魔术方法速查
+
+| 类别 | 方法 | 触发场景 |
+|------|------|----------|
+| 构造 | `__init__` | 创建对象后初始化 |
+| 构造 | `__new__` | 创建对象（已讲过） |
+| 字符串 | `__str__` | `print()`、`str()` |
+| 字符串 | `__repr__` | `repr()`、交互式显示 |
+| 比较 | `__eq__` | `==` |
+| 比较 | `__lt__` | `<` |
+| 比较 | `__gt__` | `>` |
+| 比较 | `__le__` | `<=` |
+| 比较 | `__ge__` | `>=` |
+| 比较 | `__ne__` | `!=` |
+| 算术 | `__add__` | `+` |
+| 算术 | `__sub__` | `-` |
+| 算术 | `__mul__` | `*` |
+| 算术 | `__truediv__` | `/` |
+| 容器 | `__len__` | `len()` |
+| 容器 | `__getitem__` | `obj[key]` |
+| 容器 | `__setitem__` | `obj[key] = value` |
+| 容器 | `__delitem__` | `del obj[key]` |
+| 容器 | `__contains__` | `in` |
+| 容器 | `__iter__` | `for...in` |
+| 转换 | `__int__` | `int()` |
+| 转换 | `__float__` | `float()` |
+| 转换 | `__bool__` | `bool()` |
+| 可调用 | `__call__` | `obj()` |
+| 属性 | `__getattr__` | 访问不存在的属性 |
+| 属性 | `__getattribute__` | 访问任意属性 |
+| 属性 | `__setattr__` | 设置属性 |
+| 属性 | `__delattr__` | 删除属性 |
+| 生命周期 | `__del__` | 对象销毁 |
+
+---
+
+## 作业（可使用AI、未实现，直接看的答案）
+
+实现一个 `Fraction` 类，支持以下操作：
+
+```python
+f1 = Fraction(1, 2)   # 1/2
+f2 = Fraction(1, 3)   # 1/3
+
+print(f1 + f2)        # 5/6
+print(f1 - f2)        # 1/6
+print(f1 * f2)        # 1/6
+print(f1 / f2)        # 3/2
+print(f1 == f2)       # False
+print(f1 > f2)        # True
+print(float(f1))      # 0.5
+print(str(f1))        # "1/2"
+print(repr(f1))       # "Fraction(1, 2)"
+```
+
+**提示：**
+- 实现 `__init__`、`__str__`、`__repr__`
+- 实现 `__eq__`、`__lt__`、`__gt__`、`__le__`、`__ge__`、`__ne__`
+- 实现 `__add__`、`__sub__`、`__mul__`、`__truediv__`
+- 实现 `__float__`
+
+
+# 描述符
+
+## 问题
+
+```python
+import math
+
+
+class Circle:
+    def __init__(self, radius):
+        self.radius = radius
+        self.area = radius**2 * math.pi
+        self.diameter = radius * 2
+
+
+c = Circle(5)
+print(c.radius, c.area, c.diameter)  # 没问题
+
+# 出现问题
+# 1. 不符合逻辑的赋值
+c.radius = -10
+
+# 2. 数据不一致
+c.radius = 10
+print(c.radius, c.area, c.diameter)  # 数据不一致
+```
+
+## 描述符协议
+
+### 认识术语
+
+描述符协议规定，只要一个类，实现了`__get__`、`__set__`、`__delete__`任意一个实例方法：
+
+- 该类称之为**描述符类**
+- 该类的对象称之为**描述符对象**，也可以简称为**描述符**
+  - 如果描述符类实现了`__set__`、`__delete__`任意一个
+    它的对象又称之为**数据型描述符**（Data Descriptor）
+  - 如果描述符类只实现了`__get__`
+    它的对象又称为**非数据型描述符**（Non-Data Descriptor）
+- 描述符对象只有是**类属性**时才有意义
+  所以描述符通常又称为**属性描述符**
+
+```python
+# 描述符类
+class MyDescriptor:
+    def __get__(self, instance, owner):
+        pass
+
+    def __set__(self, instance, value):
+        pass
+
+    def __delete__(self, instance):
+        pass
+
+
+class MyClass:
+    my_attr = MyDescriptor()  # 描述符、属性描述符、数据描述符
+```
+
+### 访问顺序
+
+当访问实例成员时，按照以下优先级查找成员：
+
+1. **数据型描述符**（类属性）
+2. 实例属性（`instance.__dict__`）
+3. 类属性（普通）
+4. 父类...
+
+```python
+# 描述符类
+class MyDescriptor:
+    def __get__(self, instance, owner):
+        pass
+
+    def __set__(self, instance, value):
+        pass
+
+    def __delete__(self, instance):
+        pass
+
+
+class MyClass:
+    my_attr = MyDescriptor()  # 描述符、属性描述符、数据描述符
+
+    def __init__(self, value):
+        self.my_attr = value  # 赋值的是类属性
+
+
+ins = MyClass(10)
+print(ins.__dict__)  # 不包含 my_attr
+print(ins.my_attr)  # 访问的是类属性
+```
+
+### 读写删操作
+
+描述符会拦截对它的读、写、删操作
+
+```python
+# 描述符类
+class MyDescriptor:
+    def __get__(self, instance, owner):
+        print("__get__ called")
+        pass
+
+    def __set__(self, instance, value):
+        print("__set__ called")
+        pass
+
+    def __delete__(self, instance):
+        print("__delete__ called")
+        pass
+
+
+class MyClass:
+    my_attr1 = MyDescriptor()  # 描述符、属性描述符、数据描述符
+    my_attr2 = MyDescriptor()  # 描述符、属性描述符、数据描述符
+
+
+ins = MyClass()
+ins.my_attr1  # MyDescriptor.__get__(MyClass.my_attr, ins, MyClass)
+ins.my_attr1 = 10  # MyDescriptor.__set__(MyClass.my_attr, ins, 10)
+del ins.my_attr1  # MyDescriptor.__delete__(MyClass.my_attr, ins)
+
+
+MyClass.my_attr2  # MyDescriptor.__get__(MyClass.my_attr, None, MyClass)
+MyClass.my_attr2 = 20  # 直接覆盖 my_attr2，my_attr2 不再是描述符了
+del MyClass.my_attr2  # 直接删除 my_attr2 属性，my_attr2 不再存在
+
+```
+
+**最佳实践：**
+
+1. 绝大部分时候都使用**数据型描述符**
+2. 对描述符的访问，永远通过实例去访问
+
+### 钩子函数
+
+目前，描述符类中仅提供了一个钩子函数`__set_name__`
+
+> Python3.6版本加入
+
+```python
+# 描述符类
+class MyDescriptor:
+    def __set_name__(self, owner, name):
+        print(f"__set_name__ called with owner={owner}, name={name}")
+
+    def __get__(self, instance, owner):
+        pass
+
+    def __set__(self, instance, value):
+        pass
+
+    def __delete__(self, instance):
+        pass
+
+
+class MyClass:
+    # 这里会触发__set_name__
+    # 时间点：完成赋值后
+    # 作用：让描述符知道自己被赋值给了哪个类的哪个属性
+    my_attr1 = MyDescriptor()
+    my_attr2 = MyDescriptor()
+```
+
+## 解决最初的问题
+
+```python
+import math
+
+
+class RadiusDescriptor:
+
+    def __set__(self, instance, value):
+        if value < 0:
+            raise ValueError("半径不能为负数")
+        instance._radius = value
+
+    def __get__(self, instance, owner):
+        return instance._radius
+    
+    def __delete__(self, instance):
+        raise AttributeError("radius 不能被删除")
+
+
+class AreaDescriptor:
+
+    def __get__(self, instance, owner):
+        return instance.radius**2 * math.pi
+
+    def __set__(self, instance, value):
+        raise AttributeError("area 是只读属性，不能设置")
+    
+    def __delete__(self, instance):
+        raise AttributeError("area 不能被删除")
+
+
+class DiameterDescriptor:
+
+    def __get__(self, instance, owner):
+        return instance.radius * 2
+
+    def __set__(self, instance, value):
+        raise AttributeError("diameter 是只读属性，不能设置")
+    
+    def __delete__(self, instance):
+        raise AttributeError("diameter 不能被删除")
+
+
+class Circle:
+    radius = RadiusDescriptor()
+    area = AreaDescriptor()
+    diameter = DiameterDescriptor()
+
+    def __init__(self, radius):
+        self.radius = radius
+
+
+c1 = Circle(5)  # 没问题
+print(c1.radius)  # 输出 5
+print(c1.area)  # 输出 78.53981633974483
+print(c1.diameter)  # 输出 10
+c1.radius = 10  # 没问题
+print(c1.radius)  # 输出 10
+print(c1.area)  # 输出 314.1592653589793
+print(c1.diameter)  # 输出 20
+
+c1.area = 100  # 报错
+print(c1.area)
+
+```
+
+
+
+## @property 装饰器
+
+`@property` 可以将方法变成**属性**，访问时像访问普通属性一样，不需要加括号：
+
+```python
+class Circle:
+    def __init__(self, radius):
+        self._radius = radius
+
+    @property
+    def radius(self):
+        """获取半径"""
+        return self._radius
+
+    @radius.setter
+    def radius(self, value):
+        """设置半径，带验证"""
+        if value < 0:
+            raise ValueError("半径不能为负数")
+        self._radius = value
+
+    @radius.deleter
+    def radius(self):
+        """删除半径"""
+        print("删除半径")
+        del self._radius
+
+    @property
+    def area(self):
+        """计算面积（只读属性）"""
+        import math
+        return math.pi * self._radius ** 2
+
+    @property
+    def diameter(self):
+        """计算直径（只读属性）"""
+        return self._radius * 2
+
+
+c = Circle(5)
+print(c.radius)     # 5 —— 调用 getter
+print(c.area)       # 78.54... —— 自动计算
+print(c.diameter)   # 10
+
+c.radius = 10       # 调用 setter
+print(c.area)       # 314.15...
+
+# c.area = 100      # AttributeError! area 没有 setter
+# c.radius = -5     # ValueError! 半径不能为负数
+
+# del c.radius      # 调用 deleter
+# print(c.radius)   # AttributeError!
+```
+
+**关键点：**
+- `@property` 将方法变成**只读属性**
+- `@属性名.setter` 定义可写属性（必须和 property 同名）
+- `@属性名.deleter` 定义可删除属性
+
+---
+
+
+
+## 应用场景
+
+### 1. 惰性计算
+
+```python
+class LazyProperty:
+    """惰性加载属性：只在第一次访问时计算"""
+    
+    def __init__(self, func):
+        self.func = func
+        self.name = func.__name__
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        value = self.func(instance)
+        # 将结果缓存到实例的属性中
+        setattr(instance, self.name, value)
+        return value
+
+
+class DataLoader:
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    @LazyProperty
+    def data(self):
+        print(f"正在加载文件: {self.file_path}")
+        # 模拟耗时操作
+        return [1, 2, 3, 4, 5]
+
+
+loader = DataLoader("data.txt")
+print(loader.data)  # 正在加载文件: data.txt
+                    # [1, 2, 3, 4, 5]
+print(loader.data)  # [1, 2, 3, 4, 5] —— 不再加载，直接从属性读取
+```
+
+### 2. 类型检查
+
+```python
+class Typed:
+    """强制类型检查的描述符"""
+    
+    def __init__(self, expected_type):
+        self.expected_type = expected_type
+        self.name = None
+
+    def __set_name__(self, owner, name):
+        self.name = name
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        return instance.__dict__[self.name]
+
+    def __set__(self, instance, value):
+        if not isinstance(value, self.expected_type):
+            raise TypeError(
+                f"{self.name} 必须是 {self.expected_type.__name__} 类型，"
+                f"而不是 {type(value).__name__}"
+            )
+        instance.__dict__[self.name] = value
+
+
+class Student:
+    name = Typed(str)
+    age = Typed(int)
+    score = Typed(float)
+
+    def __init__(self, name, age, score):
+        self.name = name
+        self.age = age
+        self.score = score
+
+
+s = Student("Alice", 20, 85.5)
+# s.age = "20"      # TypeError! age 必须是 int 类型，而不是 str
+```
+
+---
+
+## 作业（可使用AI，已看懂）
+
+### 一、实现只读属性
+
+编写一个类 `ImmutablePoint`，创建后不能修改坐标：
+
+```python
+p = ImmutablePoint(3, 4)
+print(p.x)      # 3
+print(p.y)      # 4
+
+# p.x = 10      # AttributeError! 不能修改只读属性
+```
+
+**提示：** 使用 `@property` 但不提供 setter。
+
+### 二、实现范围验证
+
+编写一个 `Temperature` 类，温度必须在 -273.15（绝对零度）到 1000 之间：
+
+```python
+t = Temperature(25)
+print(t.celsius)      # 25
+print(t.fahrenheit)   # 77.0（只读属性，自动计算）
+print(t.kelvin)       # 298.15（只读属性，自动计算）
+
+# t.celsius = -300    # ValueError! 温度不能低于绝对零度
+```
+
+### 三、实现类属性计数器
+
+编写一个描述符，记录某个类属性被访问和修改的次数：
+
+```python
+class AccessCounter:
+    # 你的代码
+    pass
+
+
+class MyClass:
+    value = AccessCounter(10)  # 初始值为 10
+
+
+obj = MyClass()
+print(obj.value)      # 10
+print(obj.value)      # 10
+obj.value = 20
+print(obj.value)      # 20
+
+# 查看访问和修改次数
+print(AccessCounter.get_access_count())   # 3（被访问了 3 次）
+print(AccessCounter.get_modify_count())   # 1（被修改了 1 次）
+```
+
+### 四、思考题
+
+下面代码的输出是什么？为什么？
+
+```python
+class Descriptor:
+    def __get__(self, instance, owner):
+        print(f"__get__ called, instance={instance}, owner={owner}")
+        return 42
+
+    def __set__(self, instance, value):
+        print(f"__set__ called, instance={instance}, value={value}")
+
+
+class A:
+    x = Descriptor()
+
+
+a = A()
+print(a.x)
+a.x = 100
+a.__dict__["x"] = "instance"
+print(a.x)
+print(a.__dict__)
+```
+# 异常处理
+
+## 异常的捕获
+
+使用 `try...except` 捕获可能发生的异常
+
+可以捕获多个异常，并获取异常对象：
+
+```python
+try:
+    number = int("abc")
+except ValueError as e:
+    print(f"数值错误: {e}")
+except TypeError as e:
+    print(f"类型错误: {e}")
+else:
+    print("没有异常时执行")
+finally:
+    print("始终会执行")
+```
+
+```python
+try:
+    number = int("abc")
+except ValueError as e:
+    print(e.args)  # 获取异常信息
+    print(e.__traceback__)  # 异常的堆栈跟踪对象
+```
+
+## 异常类型
+
+Python 内置异常形成层次结构，捕获父类异常可以捕获其所有子类：
+
+```
+BaseException
+ ├── SystemExit          # sys.exit() 引发
+ ├── KeyboardInterrupt   # Ctrl+C 引发
+ └── Exception           # 常规异常的基类
+      ├── ArithmeticError
+      │    └── ZeroDivisionError
+      ├── LookupError
+      │    ├── IndexError
+      │    └── KeyError
+      ├── TypeError
+      ├── ValueError
+      │    └── UnicodeError
+      └── ...
+```
+
+```python
+# 捕获 Exception 可以捕获几乎所有常规异常
+try:
+    # 可能引发各种异常的操作
+    pass
+except Exception as e:
+    print(f"发生错误: {e}")
+
+# 但不推荐捕获过于宽泛的异常，应尽量精确
+```
+
+
+
+## 主动抛出异常
+
+使用 `raise` 主动抛出异常：
+
+```python
+def withdraw(balance, amount):
+    if amount > balance:
+        raise ValueError("余额不足")
+    if amount <= 0:
+        raise ValueError("取款金额必须大于零")
+    return balance - amount
+
+try:
+    withdraw(100, 200)
+except ValueError as e:
+    print(e)  # 余额不足
+```
+
+可以重新抛出当前异常：
+
+```python
+try:
+    risky_operation()
+except Exception:
+    # 记录日志后继续抛出
+    print("发生异常，准备抛出")
+    raise  # 重新抛出
+```
+
+## 自定义异常
+
+通过继承 `Exception` 或其子类创建自定义异常：
+
+```python
+class ValidationError(Exception):
+    """参数验证失败"""
+    pass
+
+class NotFoundError(Exception):
+    """资源不存在"""
+    
+    def __init__(self, resource, resource_id):
+        self.resource = resource
+        self.resource_id = resource_id
+        super().__init__(f"{resource} (id={resource_id}) 不存在")
+
+
+# 使用
+def get_user(user_id):
+    if user_id <= 0:
+        raise ValidationError("用户ID必须大于零")
+    if user_id not in user_database:
+        raise NotFoundError("User", user_id)
+    return user_database[user_id]
+```
+
+
+
+## 异常链
+
+```python
+def exception_chains1():
+    # 方式1：直接抛出（无关联）
+    try:
+        raise ValueError("错误A")
+    except ValueError:
+        raise RuntimeError("错误B")  # 隐式关联，__context__ 有值
+
+
+def exception_chains2():
+    # 方式2：from 显式关联
+    try:
+        raise ValueError("错误A")
+    except ValueError as e:
+        raise RuntimeError("错误B") from e  # 显式关联，__cause__ 有值
+
+
+# 查看区别
+try:
+    exception_chains1()
+except RuntimeError as e:
+    print("隐式关联:", e)
+    print(f"  __cause__: {e.__cause__}")  # None
+    print(f"  __context__: {e.__context__}")  # ValueError
+
+try:
+    exception_chains2()
+except RuntimeError as e:
+    print("\n显式关联:", e)
+    print(f"  __cause__: {e.__cause__}")  # ValueError
+    print(f"  __context__: {e.__context__}")  # None
+
+```
+
+## 作业（可使用AI，已看懂）
+
+### 一、实现安全的除法函数
+
+```python
+def safe_divide(a, b):
+    """
+    安全除法，要求：
+    1. 捕获 ZeroDivisionError，返回 0
+    2. 捕获 TypeError，打印"参数类型错误"并返回 None
+    """
+    # 你的代码
+    pass
+
+print(safe_divide(10, 2))      # 5.0
+print(safe_divide(10, 0))      # 0
+print(safe_divide("10", 2))    # 参数类型错误，None
+```
+
+### 二、实现重试装饰器
+
+```python
+import time
+
+def retry(max_attempts, delay=1):
+    """
+    失败重试装饰器
+    如果函数抛出异常，等待 delay 秒后重试，最多重试 max_attempts 次
+    """
+    # 你的代码
+    pass
+
+@retry(max_attempts=3, delay=1)
+def unstable_function():
+    """模拟不稳定的操作"""
+    import random
+    if random.random() < 0.7:  # 70% 概率失败
+        raise ConnectionError("连接失败")
+    return "成功"
+
+# 应该能处理失败并重试，最终返回"成功"或抛出最后一次异常
+```
+
+### 三、自定义异常与验证
+
+```python
+class InsufficientFundsError(Exception):
+    """余额不足"""
+    pass
+
+class AccountFrozenError(Exception):
+    """账户已冻结"""
+    pass
+
+class BankAccount:
+    def __init__(self, balance=0, frozen=False):
+        self.balance = balance
+        self.frozen = frozen
+    
+    def withdraw(self, amount):
+        """
+        取款，要求：
+        1. 如果 frozen=True，抛出 AccountFrozenError
+        2. 如果 amount > balance，抛出 InsufficientFundsError
+        3. 如果 amount <= 0，抛出 ValueError
+        """
+        # 你的代码
+        pass
+    
+    def deposit(self, amount):
+        """
+        存款，要求：
+        1. 如果 frozen=True，抛出 AccountFrozenError
+        2. 如果 amount <= 0，抛出 ValueError
+        """
+        # 你的代码
+        pass
+
+# 测试
+account = BankAccount(100)
+account.deposit(50)           # balance = 150
+account.withdraw(30)          # balance = 120
+
+# account.withdraw(200)       # InsufficientFundsError
+# account.deposit(-10)        # ValueError
+
+frozen_account = BankAccount(100, frozen=True)
+# frozen_account.withdraw(10)  # AccountFrozenError
+```
+
+### 四、异常转换
+
+实现一个函数，将各种异常转换为统一的 APIException：
+
+```python
+class APIException(Exception):
+    def __init__(self, code, message):
+        self.code = code
+        self.message = message
+        super().__init__(message)
+
+def call_api():
+    """模拟API调用，可能抛出各种异常"""
+    import random
+    errors = [
+        ValueError("参数错误"),
+        ConnectionError("连接超时"),
+        TimeoutError("请求超时"),
+        RuntimeError("服务器内部错误")
+    ]
+    raise random.choice(errors)
+
+def robust_api_call():
+    """
+    调用 call_api()，将各种异常转换为 APIException：
+    - ValueError → APIException(400, "参数错误")
+    - ConnectionError/TimeoutError → APIException(503, "服务不可用")
+    - 其他异常 → APIException(500, "服务器内部错误")
+    """
+    # 你的代码
+    pass
+```
+
+# 迭代器与生成器
+
+## 迭代器(Iterator)
+
+迭代器是实现了`__iter__`和`__next__`方法的对象
+
+```python
+class MyIterator:
+
+    def __iter__(self):
+        """
+        要求：必须返回迭代器
+        99.999999%的情况下，返回迭代器自身
+        """
+        return self
+
+    def __next__(self):
+        """返回下一个值"""
+        pass
+      
+obj = MyIterator()  # obj 是一个迭代器
+```
+
+
+
+### 应用：无限序列
+
+```python
+class FibonacciIterator:
+    """无限斐波那契数列迭代器"""
+
+    def __init__(self):
+        self.a = 1
+        self.b = 1
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        current = self.a
+        self.a, self.b = self.b, self.a + self.b
+        return current
+
+
+# 使用示例
+fib = FibonacciIterator()
+
+print(next(fib))  # 输出: 1  等效于 fib.__next__()
+print(next(fib))  # 输出: 1
+print(next(fib))  # 输出: 2
+print(next(fib))  # 输出: 3
+print(next(fib))  # 输出: 5
+print(next(fib))  # 输出: 8
+
+```
+
+
+
+## 可迭代对象(Iterable)
+
+**可迭代协议规定，只要一个对象实现了 `__iter__()` 方法，且返回一个迭代器，则它就是可迭代对象**
+
+推理可知：**迭代器一定是可迭代对象**
+
+> python中的容器类型都是可迭代对象
+
+```python
+my_list = [1, 2, 3]
+
+# 调用 iter() 获取迭代器
+iterator = iter(my_list)  # 等价于 my_list.__iter__()
+
+print(type(iterator))     # <class 'list_iterator'>
+
+# 使用 next() 逐个获取值
+print(next(iterator))     # 1
+print(next(iterator))     # 2
+print(next(iterator))     # 3
+
+# print(next(iterator))   # StopIteration! 没有更多元素了
+```
+
+### 示例：倒数对象
+
+```python
+class Countdown:
+    """可迭代对象：倒数"""
+
+    def __init__(self, start):
+        self.start = start
+
+    def __iter__(self):
+        """返回一个新的迭代器"""
+        return CountdownIterator(self.start)
+
+
+class CountdownIterator:
+    """迭代器"""
+
+    def __init__(self, start):
+        self.current = start
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.current < 0:
+            raise StopIteration
+        num = self.current
+        self.current -= 1
+        return num
+
+
+cd = Countdown(5)
+
+iterator = iter(cd)
+print(next(iterator))  # 5
+print(next(iterator))  # 4
+print(next(iterator))  # 3
+print(next(iterator))  # 2
+print(next(iterator))  # 1
+print(next(iterator))  # 0
+# print(next(iterator))  # StopIteration!
+
+```
+
+
+
+### 消费者
+
+#### 1. `for`循环
+
+```python
+# for 循环会自动调用 iter() 和 next()
+for n in Countdown(3):
+    print(n)  # 3 2 1 0
+```
+
+#### 2. **`list()`、`tuple()`、`set()` 等构造函数**
+
+```python
+print(list(Countdown(3)))  # [3, 2, 1, 0]
+print(tuple(Countdown(3)))  # (3, 2, 1, 0)
+print(set(Countdown(3)))  # {0, 1, 2, 3}
+```
+
+#### 3. **`*` 解包操作符**
+
+```python
+first, *rest = Countdown(3)
+print(first)  # 3
+print(rest)   # [2, 1, 0]
+
+# 或用列表解包
+values = [*Countdown(3)]
+print(values)  # [3, 2, 1, 0]
+```
+
+#### 4. **`in` 成员判断**
+
+```python
+print(5 in Countdown(3))   # False
+print(2 in Countdown(3))   # True
+```
+
+#### 5. **`sum()`、`max()`、`min()` 等内置函数**
+
+```python
+print(sum(Countdown(3)))  # 6
+print(max(Countdown(3)))  # 3
+print(min(Countdown(3)))  # 0
+```
+
+#### 6. **`zip()`、`map()`、`filter()` 等函数**
+
+```python
+# zip 合并多个可迭代对象
+names = ["Alice", "Bob", "Charlie"]
+ages = [25, 30, 35]
+for name, age in zip(names, ages):
+    print(f"{name}: {age}")
+# Alice: 25
+# Bob: 30
+# Charlie: 35
+
+# map 对元素进行转换
+squares = map(lambda x: x**2, Countdown(3))
+print(list(squares))  # [9, 4, 1, 0]
+
+# filter 过滤元素
+evens = filter(lambda x: x % 2 == 0, Countdown(3))
+print(list(evens))  # [2, 0]
+```
+
+#### 7. **`any()`、`all()`**
+
+```python
+numbers = Countdown(3)
+print(any(numbers))  # True (至少一个为真)
+print(all(numbers))  # False (是否所有都为真)
+```
+
+### range函数
+
+`range()` 是 Python 中最常用的可迭代对象之一，用于生成整数序列：
+
+```python
+# range(stop): 0 到 stop-1
+for i in range(5):
+    print(i, end=" ")  # 0 1 2 3 4
+
+# range(start, stop): start 到 stop-1
+for i in range(2, 6):
+    print(i, end=" ")  # 2 3 4 5
+
+# range(start, stop, step): 指定步长
+for i in range(0, 10, 2):
+    print(i, end=" ")  # 0 2 4 6 8
+
+# 负数步长（倒序）
+for i in range(5, 0, -1):
+    print(i, end=" ")  # 5 4 3 2 1
+```
+
+**重要特性：**
+
+1. **惰性计算**：`range` 不会一次性生成所有数字，而是按需生成
+2. **支持索引和切片**：与列表不同，`range` 支持随机访问
+
+```python
+r = range(0, 100, 2)
+
+print(len(r))      # 50
+print(r[5])        # 10
+print(r[0:5])      # range(0, 10, 2)
+print(10 in r)     # True
+print(11 in r)     # False
+```
+
+3. **不是迭代器**：`range` 是可迭代对象，但不是迭代器（可以重复使用）
+
+```python
+r = range(3)
+
+for i in r:
+    print(i, end=" ")  # 0 1 2
+print()
+
+for i in r:
+    print(i, end=" ")  # 0 1 2（可以再次遍历）
+```
+
+> `range` 对象在内存中只存储 `start`、`stop`、`step` 三个值，无论范围多大都占用固定内存
+
+### 推导式
+
+推导式(Comprehension)是一种简洁的语法，用于从一个可迭代对象创建新的列表、字典或集合。
+
+#### 列表推导式
+
+```python
+# 基本语法：[表达式 for 变量 in 可迭代对象]
+squares = [x**2 for x in range(5)]
+print(squares)  # [0, 1, 4, 9, 16]
+
+# 带条件过滤：[表达式 for 变量 in 可迭代对象 if 条件]
+evens = [x for x in range(10) if x % 2 == 0]
+print(evens)  # [0, 2, 4, 6, 8]
+
+# 带 if-else 条件
+labels = ["偶数" if x % 2 == 0 else "奇数" for x in range(5)]
+print(labels)  # ['偶数', '奇数', '偶数', '奇数', '偶数']
+```
+
+#### 字典推导式
+
+```python
+# 基本语法：{键表达式: 值表达式 for 变量 in 可迭代对象}
+square_dict = {x: x**2 for x in range(5)}
+print(square_dict)  # {0: 0, 1: 1, 2: 4, 3: 9, 4: 16}
+
+# 带条件过滤
+odd_squares = {x: x**2 for x in range(10) if x % 2 != 0}
+print(odd_squares)  # {1: 1, 3: 9, 5: 25, 7: 49, 9: 81}
+```
+
+#### 集合推导式
+
+```python
+# 基本语法：{表达式 for 变量 in 可迭代对象}
+square_set = {x**2 for x in range(10)}
+print(square_set)  # {0, 1, 4, 81, 64, 9, 16, 49, 25, 36}
+
+# 带条件过滤
+evens = {x for x in range(20) if x % 2 == 0}
+print(evens)  # {0, 2, 4, 6, 8, 10, 12, 14, 16, 18}
+```
+
+#### 嵌套推导式
+
+```python
+# 嵌套列表推导式：将二维列表展平
+matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+flat = [x for row in matrix for x in row]
+print(flat)  # [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+# 等价于：
+# flat = []
+# for row in matrix:
+#     for x in row:
+#         flat.append(x)
+
+# 嵌套条件
+matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+# 只保留偶数
+result = [x for row in matrix for x in row if x % 2 == 0]
+print(result)  # [2, 4, 6, 8]
+```
+
+#### 元组推导式
+
+Python中没有元组推导式。
+
+#### 推导式 vs 循环
+
+推导式通常比等效的 `for` 循环更快，也更简洁：
+
+```python
+# 推导式（推荐）
+squares = [x**2 for x in range(10)]
+
+# 等效的循环写法
+squares = []
+for x in range(10):
+    squares.append(x**2)
+```
+
+> 注意：当逻辑过于复杂时，使用普通循环会更清晰易读
+
+---
+
+## 生成器(Generator)
+
+### 生成器函数
+
+```python
+# Python识别到这个函数中包含yield的关键字，因此该函数是一个生成器函数。
+def simple_generator():
+    print("开始")
+    yield 1
+    print("继续")
+    yield 2
+    print("结束")
+    yield 3
+
+
+g = simple_generator() # 生成器函数返回的是生成器，生成器是一个迭代器。
+print(next(g))  # 开始
+                # 1
+print(next(g))  # 继续
+                # 2
+print(next(g))  # 结束
+                # 3
+# print(next(g))  # StopIteration!
+```
+
+可以利用生成器这种简易写法，快速完成迭代器的编写。
+
+```python
+def countdown(start):
+    """生成器函数"""
+    while start >= 0:
+        yield start
+        start -= 1
+
+
+# 调用生成器函数，返回生成器
+cd = countdown(5)
+print(type(cd))       # <class 'generator'>
+
+for n in cd:
+    print(n, end=" ")  # 5 4 3 2 1 0
+```
+
+**生成器的特点：**
+
+1. **惰性计算**：只在需要时生成值，不占用大量内存
+2. **状态保存**：每次 `yield` 后暂停，下次从暂停处继续
+3. **一次性**：和迭代器一样，只能遍历一次
+
+### 链式调用
+
+```python
+def sub_generator():
+    yield 1
+    yield 2
+
+
+def main_generator():
+    yield "开始"
+    for value in sub_generator():
+        yield value
+    yield "结束"
+
+
+for value in main_generator():
+    print(value)
+# 开始
+# 1
+# 2
+# 结束
+```
+
+可使用`yield from` 语法糖简化代码：
+
+```python
+def main_generator():
+    yield "开始"
+    yield from sub_generator()  # 委托给子生成器
+    yield "结束"
+```
+
+### 发送数据
+
+当调用生成器的`send`函数的时候，可以向生成器发送数据，该数据会导致`yield`的表达式返回对应的值。
+
+```python
+def calculator():
+    total = 0
+    while True:
+        x = yield total  # yield 返回当前总数，并接收新值
+        if x is None:
+            break
+        total += x
+
+calc = calculator()
+print(next(calc))      # 输出: 0 (启动)
+print(calc.send(10))   # 输出: 10 (发送10，累加后返回)
+print(calc.send(20))   # 输出: 30
+print(calc.send(5))    # 输出: 35
+```
+
+### 生成器表达式
+
+类似列表推导式，但使用圆括号，返回生成器：
+
+```python
+# 生成器表达式 —— 惰性计算，节省内存
+squares_gen = (x**2 for x in range(1000000))
+
+print(type(squares_gen))   # <class 'generator'>
+
+# 按需获取值
+print(next(squares_gen))   # 0
+print(next(squares_gen))   # 1
+print(next(squares_gen))   # 4
+```
+
+---
+
+
+
+## itertools 简介
+
+`itertools` 模块提供了许多高效的迭代器工具：
+
+```python
+import itertools
+
+# count(start, step)：无限计数
+counter = itertools.count(10, 2)
+print(next(counter))  # 10
+print(next(counter))  # 12
+print(next(counter))  # 14
+
+# cycle(iterable)：无限循环
+cy = itertools.cycle(["A", "B", "C"])
+print(next(cy))  # A
+print(next(cy))  # B
+print(next(cy))  # C
+print(next(cy))  # A（重新开始）
+
+# repeat(value, times)：重复值
+times_three = list(itertools.repeat("x", 3))
+print(times_three)  # ['x', 'x', 'x']
+
+# chain(*iterables)：连接多个可迭代对象
+combined = list(itertools.chain([1, 2], [3, 4], [5, 6]))
+print(combined)  # [1, 2, 3, 4, 5, 6]
+
+# islice(iterable, start, stop, step)：切片（支持无限迭代器）
+first_five = list(itertools.islice(itertools.count(), 5))
+print(first_five)  # [0, 1, 2, 3, 4]
+
+# permutations(iterable, r)：排列
+perms = list(itertools.permutations([1, 2, 3], 2))
+print(perms)  # [(1, 2), (1, 3), (2, 1), (2, 3), (3, 1), (3, 2)]
+
+# combinations(iterable, r)：组合
+combs = list(itertools.combinations([1, 2, 3, 4], 2))
+print(combs)  # [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)]
+```
+
+---
+
+## 作业(已完成)
+
+先使用费曼学习法，复述迭代器、可迭代对象、生成器的概念和关系
+
+### 一、实现扁平化迭代器
+
+编写一个生成器函数 `flatten`，将嵌套的列表扁平化：
+
+```python
+def flatten(nested_list):
+    # 你的代码
+    pass
+
+
+nested = [1, [2, [3, 4], 5], 6, [7, 8]]
+print(list(flatten(nested)))
+# [1, 2, 3, 4, 5, 6, 7, 8]
+```
+
+### 二、实现分页迭代器
+
+编写一个生成器，模拟从数据库分页读取数据：
+
+```python
+def paginated_query(total_items, page_size):
+    """
+    模拟分页查询
+    total_items: 总数据量
+    page_size: 每页大小
+    每次 yield 返回一页数据（列表）
+    """
+    # 你的代码
+    pass
+
+
+for page in paginated_query(25, 10):
+    print(page)
+# [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+# [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+# [20, 21, 22, 23, 24]
+```
+
+### 三、思考题
+
+下面代码的输出是什么？为什么？
+
+```python
+def generator():
+    print("准备 yield 1")
+    yield 1
+    print("准备 yield 2")
+    yield 2
+    print("准备 yield 3")
+    yield 3
+    print("生成器结束")
+
+
+g = generator()
+print("生成器已创建")
+print(next(g))
+print("---")
+print(next(g))
+print("---")
+g.close()
+print("生成器已关闭")
+print(next(g))
+```
+# 上下文管理器
+
+```python
+with 表达式 as 变量名:
+    代码块
+
+# 等效于
+变量名 = 表达式.__enter__()
+try:
+    代码块
+except Exception as e:
+    stopPropagation = 变量名.__exit__(type(e), e, e.__traceback__)
+    if not stopPropagation:
+        raise
+else:
+    变量名.__exit__(None, None, None)
+```
+
+带 `__enter__` 和 `__exit__` 方法的对象叫做**上下文管理器（Context Manager）**。
+
+- **上下文管理器**是支持 `with` 语句的对象
+- **必须同时实现**两个方法，否则 `with` 会报错
+
+## 基本用法
+
+```python
+# 文件操作 —— 自动关闭文件
+with open("data.txt", "r") as f:
+    content = f.read()
+    # 离开 with 块时，文件自动关闭
+
+# 等价于
+f = open("data.txt", "r")
+try:
+    content = f.read()
+except Exception as e:
+    stopPropagation = f.__exit__(type(e), e, e.__traceback__)
+    if not stopPropagation:
+        raise
+else:
+    f.__exit__(None, None, None)
+```
+
+## 自定义上下文管理器
+
+实现 `__enter__` 和 `__exit__` 方法：
+
+```python
+class DatabaseConnection:
+    def __init__(self, host):
+        self.host = host
+        self.connected = False
+
+    def __enter__(self):
+        """进入 with 块时调用，返回的对象赋值给 as 后的变量"""
+        print(f"连接到数据库: {self.host}")
+        self.connected = True
+        return self  # 返回自身，供 with 块使用
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        离开 with 块时调用
+        exc_type: 异常类型（无异常时为 None）
+        exc_val: 异常值
+        exc_tb: 异常追踪信息
+        返回 True 表示异常已处理，不再向上传播
+        """
+        print(f"关闭数据库连接: {self.host}")
+        self.connected = False
+        return False  # 返回 False，不处理异常，让异常继续传播
+
+    def query(self, sql):
+        if not self.connected:
+            raise RuntimeError("未连接到数据库")
+        print(f"执行查询: {sql}")
+        return ["result1", "result2"]
+
+
+# 使用上下文管理器
+with DatabaseConnection("localhost") as conn:
+    print(f"连接状态: {conn.connected}")  # True
+    results = conn.query("SELECT * FROM users")
+    print(results)
+
+# 离开 with 块后
+print(f"连接状态: {conn.connected}")  # False
+```
+
+## 异常处理
+
+`__exit__` 方法可以处理或记录异常：
+
+```python
+class SuppressError:
+    """忽略指定类型的异常"""
+    
+    def __init__(self, *exception_types):
+        self.exception_types = exception_types
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None and issubclass(exc_type, self.exception_types):
+            print(f"捕获并忽略异常: {exc_type.__name__}: {exc_val}")
+            return True  # 返回 True，异常被处理，不再传播
+        return False  # 不处理其他异常
+
+
+# 使用
+with SuppressError(ZeroDivisionError):
+    result = 1 / 0  # 不会报错
+    print("这行不会执行")
+
+print("程序继续执行")  # 正常执行
+```
+
+---
+
+## 使用 @contextmanager 装饰器
+
+对于简单的上下文管理器，可以使用 `contextlib` 模块的 `@contextmanager` 装饰器，用生成器函数实现：
+
+```python
+from contextlib import contextmanager
+
+@contextmanager
+def managed_resource(name):
+    """用生成器实现上下文管理器"""
+    print(f"获取资源: {name}")
+    resource = {"name": name, "status": "active"}
+    try:
+        yield resource  # yield 之前的代码等价于 __enter__
+    finally:
+        print(f"释放资源: {name}")  # yield 之后的代码等价于 __exit__
+
+
+# 使用
+with managed_resource("database") as res:
+    print(f"使用资源: {res}")
+# 获取资源: database
+# 使用资源: {'name': 'database', 'status': 'active'}
+# 释放资源: database
+```
+
+**带异常处理的版本：**
+
+```python
+from contextlib import contextmanager
+
+@contextmanager
+def safe_file_write(file_path):
+    """安全写入文件：先写入临时文件，成功后再替换原文件"""
+    temp_path = file_path + ".tmp"
+    try:
+        f = open(temp_path, "w")
+        yield f
+        f.close()
+        # 写入成功，替换原文件
+        import os
+        os.replace(temp_path, file_path)
+        print("写入成功")
+    except Exception as e:
+        # 写入失败，清理临时文件
+        f.close()
+        import os
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        print(f"写入失败: {e}")
+        raise  # 重新抛出异常
+
+
+# 使用
+with safe_file_write("data.txt") as f:
+    f.write("Hello, World!\n")
+```
+
+---
+
+## 多个上下文管理器
+
+可以同时使用多个 `with`：
+
+```python
+# 嵌套写法
+with open("input.txt", "r") as fin:
+    with open("output.txt", "w") as fout:
+        fout.write(fin.read().upper())
+
+# 简化写法（Python 3.1+）
+with open("input.txt", "r") as fin, open("output.txt", "w") as fout:
+    fout.write(fin.read().upper())
+```
+
+
+
+## 作业（使用AI，已看懂）
+
+### 一、实现代码块计时
+
+```python
+from contextlib import contextmanager
+
+# 使用
+with timer("数据处理"):
+    import time
+    time.sleep(1)
+    print("处理完成")
+# 处理完成
+# 数据处理 耗时: 1.0012 秒
+```
+
+
+
+### 二、实现上下文管理器
+
+编写一个 `TempDirectory` 上下文管理器，进入时创建临时目录，退出时自动删除：
+
+```python
+with TempDirectory() as tmp_dir:
+    print(f"临时目录: {tmp_dir}")
+    # 可以在这个目录中创建文件
+    # 离开 with 块时，目录及其内容自动删除
+
+print("临时目录已清理")
+```
+
+**提示：** 使用 `tempfile` 模块创建临时目录，使用 `shutil.rmtree` 删除目录。
+
+### ~~三、实现重试装饰器（结合上下文管理器思想）~~
+
+~~编写一个上下文管理器 `retry`，在发生指定异常时自动重试：~~
+
+==这道题有问题，上下文管理器无法实现retry功能，retry需要使用装饰器实现，见answers/p3-1.py==
+
+### 四、思考题
+
+下面代码的输出是什么？为什么？
+
+```python
+from contextlib import contextmanager
+
+@contextmanager
+def demo():
+    print("进入")
+    yield
+    print("正常退出")
+
+
+with demo():
+    print("执行中")
+    raise ValueError("出错了")
+    print("这行不会执行")
+```
+
+如果改成下面的代码，输出会有什么不同？
+
+```python
+@contextmanager
+def demo():
+    print("进入")
+    try:
+        yield
+    except Exception as e:
+        print(f"捕获异常: {e}")
+    finally:
+        print("清理")
+
+
+with demo():
+    print("执行中")
+    raise ValueError("出错了")
+```
+
+# 抽象类（Abstract Base Class）
+
+抽象类是**不能被实例化**的类，用于定义子类**必须实现**的接口。Python 通过 `abc` 模块提供抽象类的支持。
+
+```python
+from abc import ABC, abstractmethod
+
+class Animal(ABC):  # 继承 ABC，表示这是一个抽象类
+    @abstractmethod
+    def speak(self):
+        """子类必须实现这个方法"""
+        pass
+
+# animal = Animal()  # TypeError: 不能实例化抽象类
+
+class Dog(Animal):
+    def speak(self):  # 必须实现抽象方法
+        print("Woof!")
+
+dog = Dog()
+dog.speak()  # Woof!
+```
+
+> 在vscode设置中，打开`python.analysis.typeCheckingMode`开关
+
+## 定义抽象类
+
+使用 `abc` 模块中的 `ABC` 类和 `@abstractmethod` 装饰器：
+
+```python
+from abc import ABC, abstractmethod
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self):
+        """计算面积"""
+        pass
+
+    @abstractmethod
+    def perimeter(self):
+        """计算周长"""
+        pass
+
+    def describe(self):
+        """普通方法，子类可直接使用"""
+        print(f"这是一个图形，面积: {self.area()}, 周长: {self.perimeter()}")
+```
+
+**要点：**
+
+- 继承 `ABC` 表示这是一个抽象类
+- `@abstractmethod` 标记的方法**必须**在子类中实现
+- 抽象类可以包含普通方法（有默认实现）
+- 抽象类**不能**被实例化
+
+---
+
+## 抽象属性
+
+除了抽象方法，还可以定义抽象属性：
+
+```python
+from abc import ABC, abstractmethod
+
+class Employee(ABC):
+    @property
+    @abstractmethod
+    def salary(self):
+        """子类必须实现 salary 属性"""
+        pass
+
+class FullTimeEmployee(Employee):
+    def __init__(self, monthly_salary):
+        self._monthly_salary = monthly_salary
+
+    @property
+    def salary(self):
+        return self._monthly_salary
+
+emp = FullTimeEmployee(10000)
+print(emp.salary)  # 10000
+```
+
+**注意：** `@property` 和 `@abstractmethod` 的顺序**不能颠倒**。
+
+---
+
+## 子类必须实现所有抽象方法
+
+如果子类没有实现所有抽象方法，它仍然是抽象类，不能被实例化：
+
+```python
+class Rectangle(Shape):
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+
+    def area(self):
+        return self.width * self.height
+
+    # 忘记实现 perimeter 方法
+
+# rect = Rectangle(3, 4)  # TypeError: 不能实例化抽象类 Rectangle
+```
+
+---
+
+## 实际应用场景
+
+抽象类常用于定义**插件接口**或**框架扩展点**：
+
+```python
+from abc import ABC, abstractmethod
+
+class DataSource(ABC):
+    """数据源抽象基类，所有数据源必须实现这些接口"""
+
+    @abstractmethod
+    def connect(self):
+        pass
+
+    @abstractmethod
+    def read(self):
+        pass
+
+    @abstractmethod
+    def close(self):
+        pass
+
+class MySQLSource(DataSource):
+    def connect(self):
+        print("连接 MySQL")
+
+    def read(self):
+        return "MySQL 数据"
+
+    def close(self):
+        print("关闭 MySQL 连接")
+
+class MongoDBSource(DataSource):
+    def connect(self):
+        print("连接 MongoDB")
+
+    def read(self):
+        return "MongoDB 数据"
+
+    def close(self):
+        print("关闭 MongoDB 连接")
+
+
+def process_data(source: DataSource):
+    """统一处理数据，不关心具体数据源"""
+    source.connect()
+    data = source.read()
+    print(f"读取到: {data}")
+    source.close()
+
+# 使用不同的数据源
+process_data(MySQLSource())
+process_data(MongoDBSource())
+```
+
+---
+
+## 作业（使用AI，已看懂）
+
+### 一、实现抽象缓存类
+
+编写一个抽象基类 `Cache`，定义缓存的基本接口，然后实现 `MemoryCache` 和 `FileCache`：
+
+```python
+from abc import ABC, abstractmethod
+
+class Cache(ABC):
+    @abstractmethod
+    def get(self, key):
+        pass
+
+    @abstractmethod
+    def set(self, key, value):
+        pass
+
+    @abstractmethod
+    def delete(self, key):
+        pass
+
+# 实现 MemoryCache（使用字典存储）
+# 实现 FileCache（使用文件存储）
+```
+
+### 二、实现抽象序列类
+
+编写一个抽象基类 `Sequence`，然后实现 `ListSequence` 和 `LinkedListSequence`：
+
+```python
+from abc import ABC, abstractmethod
+
+class Sequence(ABC):
+    @abstractmethod
+    def append(self, item):
+        pass
+
+    @abstractmethod
+    def get(self, index):
+        pass
+
+    @abstractmethod
+    def length(self):
+        pass
+
+    @abstractmethod
+    def __iter__(self):
+        pass
+
+    def is_empty(self):
+        return self.length() == 0
+
+# 实现 ListSequence（基于 Python 列表）
+# 实现 LinkedListSequence（基于链表）
+```
+
+### 三、思考题
+
+下面代码的输出是什么？为什么？
+
+```python
+from abc import ABC, abstractmethod
+
+class A(ABC):
+    @abstractmethod
+    def foo(self):
+        pass
+
+    def bar(self):
+        print("A.bar")
+
+class B(A):
+    def foo(self):
+        print("B.foo")
+
+class C(B):
+    pass
+
+c = C()
+c.foo()
+c.bar()
+```
+
+如果改成下面的代码，会发生什么？
+
+```python
+class D(A):
+    pass
+
+d = D()
+```
+
+# 类型标注
+
+> 现在开始，开启`python.analysis.typeCheckingMode`
+
+## 为什么需要类型标注
+
+```python
+# 问题：参数类型不明确
+def add(a, b):
+    return a + b
+
+# 调用者不知道应该传什么类型
+add(1, 2)        # 3
+add("1", "2")    # "12"  —— 这也是合法的，但可能不是预期行为
+add([1], [2])    # [1, 2]  —— 同样合法
+
+# 没有类型提示，难以在编码时发现错误
+```
+
+## 基础类型标注
+
+### 变量类型标注
+
+```python
+# 声明变量的类型
+name: str = "Alice"
+age: int = 25
+pi: float = 3.14
+is_active: bool = True
+
+# 没有初始值
+value: int
+value = 10
+
+# Python 是动态语言，类型标注不会强制约束
+x: int = "hello"  # 不会报错，但类型检查工具会提示
+```
+
+### 函数类型标注
+
+```python
+def greet(name: str, age: int) -> str:
+    """函数参数和返回值的类型标注"""
+    return f"{name} 今年 {age} 岁"
+
+
+# 调用
+greet("Alice", 25)        # 正确
+greet("Alice", "25")      # 运行不会报错，但类型检查会警告
+```
+
+```python
+from typing import NoReturn
+
+
+def exit_program() -> NoReturn:
+    """表示函数永远不会正常返回"""
+    import sys
+    sys.exit(1)
+```
+
+## 常用复合类型
+
+### Optional 和 Union
+
+```python
+from typing import Optional, Union
+
+
+# Optional：值可以是某个类型，也可以是 None
+def find_user(user_id: int) -> Optional[str]:
+    """返回用户名，找不到时返回 None"""
+    if user_id <= 0:
+        return None
+    return f"User_{user_id}"
+
+
+# Union：值可以是多种类型之一
+def parse_value(value: str) -> Union[int, float, str]:
+    """尝试将字符串转换为数字，失败则返回原字符串"""
+    try:
+        if "." in value:
+            return float(value)
+        return int(value)
+    except ValueError:
+        return value
+```
+
+### 容器类型
+
+```python
+from typing import List, Dict, Tuple, Set
+
+
+# 列表：元素类型
+scores: List[int] = [85, 90, 78]
+names: List[str] = ["Alice", "Bob", "Charlie"]
+
+
+# 字典：键类型, 值类型
+student_scores: Dict[str, int] = {
+    "Alice": 85,
+    "Bob": 90,
+}
+
+
+# 元组：固定长度，每个位置类型可不同
+point: Tuple[int, int] = (10, 20)
+person: Tuple[str, int, bool] = ("Alice", 25, True)
+
+
+# 集合：元素类型
+tags: Set[str] = {"python", "typing", "type-hints"}
+```
+
+### Any 和 类型别名
+
+```python
+from typing import Any, TypeAlias
+
+
+# Any：任意类型，相当于没有类型约束
+def log_data(data: Any) -> None:
+    print(f"数据: {data}")
+
+
+# 类型别名，让复杂类型更易读
+Vector: TypeAlias = List[float]
+Matrix: TypeAlias = List[List[float]]
+
+
+def dot_product(v1: Vector, v2: Vector) -> float:
+    """计算两个向量的点积"""
+    return sum(a * b for a, b in zip(v1, v2))
+```
+
+## 类与自定义类型
+
+```python
+from typing import Self
+
+
+class Point:
+    def __init__(self, x: float, y: float) -> None:
+        self.x = x
+        self.y = y
+
+    def move(self, dx: float, dy: float) -> Self:
+        """返回移动后的新点"""
+        return Point(self.x + dx, self.y + dy)
+
+    def distance_to(self, other: "Point") -> float:
+        """计算到另一个点的距离"""
+        return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2) ** 0.5
+
+
+# 使用
+p1 = Point(0, 0)
+p2 = Point(3, 4)
+print(p1.distance_to(p2))  # 5.0
+```
+
+## 泛型
+
+```python
+from typing import TypeVar, Generic
+
+
+T = TypeVar("T")
+
+
+class Stack(Generic[T]):
+    """泛型栈，可以存储任意类型的元素"""
+
+    def __init__(self) -> None:
+        self._items: list[T] = []
+
+    def push(self, item: T) -> None:
+        self._items.append(item)
+
+    def pop(self) -> T:
+        if not self._items:
+            raise IndexError("栈为空")
+        return self._items.pop()
+
+    def peek(self) -> T | None:
+        if not self._items:
+            return None
+        return self._items[-1]
+
+
+# 使用
+int_stack: Stack[int] = Stack()
+int_stack.push(1)
+int_stack.push(2)
+print(int_stack.pop())  # 2
+
+str_stack: Stack[str] = Stack()
+str_stack.push("hello")
+# str_stack.push(123)  # 类型检查会警告
+```
+
+## Callable 和 回调函数
+
+```python
+from typing import Callable
+
+
+def execute_callback(
+    callback: Callable[[int, int], int],
+    a: int,
+    b: int
+) -> int:
+    """执行回调函数"""
+    return callback(a, b)
+
+
+# 使用
+result = execute_callback(lambda x, y: x + y, 3, 5)
+print(result)  # 8
+```
+
+## 应用场景
+
+### 1. API 接口定义
+
+```python
+from typing import TypedDict
+
+
+class UserResponse(TypedDict):
+    """API 返回的用户数据结构"""
+    id: int
+    name: str
+    email: str
+    is_active: bool
+
+
+def get_user(user_id: int) -> UserResponse:
+    return {
+        "id": user_id,
+        "name": "Alice",
+        "email": "alice@example.com",
+        "is_active": True,
+    }
+```
+
+### 2. 配合 IDE 获得智能提示
+
+类型标注让 IDE 可以提供：
+- 自动补全
+- 参数提示
+- 类型错误高亮
+
+```python
+class Database:
+    def connect(self, host: str, port: int = 5432) -> "Connection":
+        ...
+
+    def query(self, sql: str) -> list[dict[str, Any]]:
+        ...
+
+
+db = Database()
+conn = db.connect("localhost")  # IDE 会提示 port 参数
+```
+
+## 忽略类型检查
+
+有时某些代码难以标注或不需要检查，可以使用 `# type: ignore` 忽略：
+
+```python
+# 忽略整行的类型检查
+data = some_dynamic_library.load()  # type: ignore
+
+# 有具体错误码时，可以指定忽略特定错误
+x: int = "hello"  # type: ignore[assignment]
+```
+
+**注意：** 应该尽量少用，只在必要时使用
+
+---
+
+## 作业（可使用AI，已看懂）
+
+### 一、为函数添加类型标注
+
+为以下函数添加合适的类型标注：
+
+```python
+def calculate_bmi(weight, height):
+    """计算 BMI 指数"""
+    if height <= 0:
+        raise ValueError("身高必须大于0")
+    return weight / (height ** 2)
+
+
+def get_grade(score):
+    """根据分数返回等级"""
+    if score >= 90:
+        return "A"
+    elif score >= 80:
+        return "B"
+    elif score >= 70:
+        return "C"
+    elif score >= 60:
+        return "D"
+    else:
+        return "F"
+```
+
+### 二、实现泛型缓存
+
+```python
+from typing import TypeVar, Generic, Optional
+
+K = TypeVar("K")
+V = TypeVar("V")
+
+
+class Cache(Generic[K, V]):
+    """泛型缓存类"""
+    
+    def __init__(self) -> None:
+        # 你的代码
+        pass
+    
+    def set(self, key: K, value: V) -> None:
+        """设置缓存"""
+        # 你的代码
+        pass
+    
+    def get(self, key: K) -> Optional[V]:
+        """获取缓存，不存在返回 None"""
+        # 你的代码
+        pass
+    
+    def clear(self) -> None:
+        """清空缓存"""
+        # 你的代码
+        pass
+
+
+# 测试
+cache: Cache[str, int] = Cache()
+cache.set("a", 1)
+cache.set("b", 2)
+print(cache.get("a"))   # 1
+print(cache.get("c"))   # None
+cache.clear()
+```
+
+### 三、定义配置类
+
+使用 `TypedDict` 定义应用配置结构：
+
+```python
+from typing import TypedDict, Optional
+
+
+class DatabaseConfig(TypedDict):
+    """数据库配置"""
+    # 你的代码：包含 host(str), port(int), username(str), password(str), database(str)
+
+
+class AppConfig(TypedDict):
+    """应用配置"""
+    # 你的代码：包含 app_name(str), debug(bool), db(DatabaseConfig)
+
+
+def load_config() -> AppConfig:
+    """加载默认配置"""
+    return {
+        "app_name": "MyApp",
+        "debug": False,
+        "db": {
+            "host": "localhost",
+            "port": 5432,
+            "username": "admin",
+            "password": "secret",
+            "database": "mydb",
+        }
+    }
+```
+
+### 四、思考题
+
+下面代码的类型标注是否正确？如果不正确，如何修改？
+
+```python
+from typing import List, Dict
+
+
+def process_data(items: List) -> Dict:
+    """处理数据项"""
+    result = {}
+    for item in items:
+        result[item["id"]] = item["value"]
+    return result
+
+
+def find_max(a: int, b: int) -> int | None:
+    """返回较大的数"""
+    if a == b:
+        return None
+    return a if a > b else b
+```
 
 
 
