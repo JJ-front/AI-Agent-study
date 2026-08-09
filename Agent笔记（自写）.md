@@ -7547,6 +7547,290 @@ deactivate
 
 实现一个命令行工具，实现和AI的聊天
 
+# 事件循环
+
+## 同步代码的问题
+**典型同步问题**：
+1.I/O操作：网络请求，文件读写，控制台输入输出，UI交互
+2.延时操作
+```python
+import requests
+
+def task1():
+  # 任务1
+  requests.post(...) # 发送请求，阻塞线程
+
+def task2():
+  # 任务2
+  pass
+
+task1()	# task1的阻塞导致后续任务白白等待，浪费了CPU资源
+task2()
+```
+
+## 什么是异步
+
+异步是一种编程模式，当有多个任务需要在**一个线程**上执行时，这种模式可以让任务不会造成线程阻塞
+
+![async_vs_sync](https://resource.duyiedu.com/yuanjin/202605271757205.svg)
+
+## 异步 VS 多线程
+
+运算密集型：多线程
+
+I/O密集型：异步
+
+## Python的事件循环
+
+事件循环是实现异步的基础手段
+
+### AbstractEventLoop类
+
+在`python`中，一个事件循环就是一个`AbstractEventLoop`类的对象
+
+```python
+import asyncio
+
+# 创建一个新的事件循环对象
+loop = asyncio.new_event_loop()
+
+# 绑定事件循环到当前线程
+asyncio.set_event_loop(loop)
+
+# 获取当前线程的事件循环
+current_loop = asyncio.get_event_loop()
+
+print("当前事件循环:", current_loop)
+
+# 移除事件循环绑定
+asyncio.set_event_loop(None)
+
+# 运行事件循环
+# 陷入死循环，除非在循环中终止，否则后续代码永远无法得到运行
+current_loop.run_forever()
+
+# 停止事件循环
+current_loop.stop()
+```
+
+### run_forever方法
+
+```python
+def run_forever(self):
+    """Run until stop() is called."""
+    while True:
+        self._run_once()
+        if self._stopping:
+            break
+```
+
+### \_run\_once逻辑
+
+`_run_once`方法的核心，就是调度事件循环中的队列
+
+它要确保每次该方法运行，都能保证ready队列中的所有回调得到执行
+**注意**：
+1.延时“队列”数据结构实际是最小堆，内部延时操作排好顺序的，时间最早到的最前面
+2.I/O"队列"数据结构实际是映射表
+
+![队列.excalidraw](https://resource.duyiedu.com/yuanjin/202605271642589.svg)
+
+> 核心逻辑：
+> 1. 检查延时队列，加入ready
+> 2. 计算等待时间 timeout
+>    1. ready有东西，timeout = 0
+>    2. 延时队列还有任务，timeout = 延时队列的队首 - 当前时间
+>    3. 都没有任务，timeout = None（永远等待）
+> 3. 用timeout的时间阻塞线程，等待I/O，期间有任何IO任务到达，马上加入ready
+>    1. 如果timeout时间到达后还没有I/O任务，则重新处理一次延时队列
+> 4. 复制ready队列
+> 5. 执行复制的队列
+
+试一试下面的代码
+
+```python
+import inspect
+import asyncio
+
+loop = asyncio.new_event_loop()
+
+
+# 将函数直接放入ready队列
+def my_ready_callback():
+    print("这是一个直接进入ready队列的回调函数")
+
+
+loop.call_soon(my_ready_callback)
+
+
+# 将函数放入延迟队列，1秒后进入ready队列
+def my_scheduled_callback():
+    print("这是一个延迟1秒后进入ready队列的回调函数")
+    loop.stop()  # 停止事件循环
+
+
+loop.call_later(1, my_scheduled_callback)
+
+loop.run_forever()
+
+print("事件循环已停止")
+
+```
+
+## 作业
+
+### 一、预测以下代码的输出结果
+
+```python
+import asyncio
+
+loop = asyncio.new_event_loop()
+
+
+def task1():
+    print("任务1")
+
+
+def task2():
+    print("任务2")
+
+
+def task3():
+    print("任务3")
+
+
+loop.call_soon(task1)
+print("task1 over")
+loop.call_soon(task2)
+print("task2 over")
+loop.call_soon(task3)
+print("task3 over")
+
+loop.run_forever()
+print("已结束")
+```
+
+### 二、预测以下代码的输出结果
+
+```python
+import asyncio
+
+loop = asyncio.new_event_loop()
+
+
+def delayed():
+    print(1)
+    loop.call_later(0, lambda: print(2))
+    loop.call_soon(lambda: print(3))
+
+
+def soon():
+    print(4)
+    loop.call_soon(lambda: print(5))
+
+
+loop.call_later(0, delayed)
+loop.call_soon(soon)
+
+
+loop.run_forever()
+print("done")
+
+```
+
+### 三、预测以下代码的输出结果
+
+```python
+import asyncio
+
+loop = asyncio.new_event_loop()
+
+
+def first():
+    print(1)
+
+
+def second():
+    print(2)
+    loop.call_soon(lambda: print(3))
+    loop.stop()
+
+
+def third():
+    print(4)
+
+
+loop.call_soon(first)
+loop.call_soon(second)
+loop.call_soon(third)
+
+loop.run_forever()
+print("循环已停止")
+
+```
+
+
+# Future类
+
+在异步场景中，有很多任务开始后，只能在**将来**的某个时间点才能完成
+
+为了表达这一逻辑，Python封装了`Future`类
+
+
+
+`Future`类表达了一个在将来会完成的异步任务
+
+每一个`Future`对象拥有两种状态：
+
+- 未完成：表示任务还在等待
+- 已完成：表示任务已有结果
+  - 正常完成
+  - 有错误
+  - 被取消
+
+开发者可以通过以下代码操作和检查状态
+
+```python
+import asyncio
+
+loop = asyncio.new_event_loop()
+fut = loop.create_future()  # 通过事件循环对象创建Future
+# print(fut.done())  # False，未完成
+# print(fut.result())  # 引发InvalidStateError异常
+
+# 让fut完成
+# fut.set_result("result")  # 设置完成结果的值
+# print(fut.done(), fut.result())  # 是否完成、完成结果，打印：True result
+
+# 发生异常
+# fut.set_exception(TypeError("类型异常"))  # 设置异常
+# print(fut.done(), fut.exception())
+# print(fut.result())  # 此时获取result会引发异常
+
+# 取消
+# fut.cancel("不等了")  # 取消future
+# print(fut.done(), fut.cancelled())  # 已完成、已取消
+# print(fut.result())  # 获取结果会引发CancelledError异常
+# print(fut.exception())  # 获取异常结果同样会引发CancelledError异常
+
+
+# # 注册回调
+# def on_done(f: asyncio.Future) -> None:
+#     try:
+#         print(f"Future完成，结果：{f.result()}")
+#     except Exception as e:
+#         print(f"Future完成，但发生异常：{e}")
+
+
+# # 注册回调函数
+# # 该回调函数会被放到事件循环的ready队列中，等待事件循环调度执行
+# fut.add_done_callback(on_done)
+
+```
+
+## 作业（已看懂）
+
+理解`25. Future/demo`目录中的两个`python`代码
 
 
 
